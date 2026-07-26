@@ -1,6 +1,7 @@
 library(dplyr)
 library(tidyr)
 library(janitor)
+library(gtsummary)
 library(binom) # for Wilson 95% CIs
 
 # Load data --------------------------------------------------------------------
@@ -158,18 +159,273 @@ sleep_measure_scores <- c(
 sleep_measure_binary <- c(
   "psqi_binary",
   "ess_binary",
-  "ais_binary"
+  "ais_binary",
+  "bss_score"
 )
 
 clinical_variables <- c(
   "liver_diagnosis",
-  "reccurence_of_disease",
+  "recurrence_of_disease",
   "rejection_graft_dysfunction",
   "any_fibrosis",
   "renal_failure",
   "depression",
   "corticoid"
 )
+
+binary_clinical_variables <- c(
+  "recurrence_of_disease",
+  "rejection_graft_dysfunction",
+  "any_fibrosis",
+  "renal_failure",
+  "depression",
+  "corticoid"
+)
+
+demographic_variables <- c(
+  "age",
+  "gender",
+  "bmi"
+)
+
+# Create descriptive summary table ---------------------------------------------
+
+# Create descriptive statitics table
+descriptive_table <- df_cleaned |>
+  mutate(
+    gender = factor(
+      gender,
+      levels = c(1, 2),
+      labels = c("Male", "Female")
+    ),
+    
+    liver_diagnosis = factor(
+      liver_diagnosis,
+      levels = c(1, 2, 3, 4, 5),
+      labels = c(
+        "Hepatitis C",
+        "Hepatitis B",
+        "PSC/PBC/AIH",
+        "Alcohol-related",
+        "Other"
+      )
+    ),
+    
+    bss_score = factor(
+      bss_score,
+      levels = c(0, 1),
+      labels = c(
+        "Low likelihood",
+        "High likelihood"
+      )
+    ),
+    
+    across(all_of(
+      binary_clinical_variables
+    ),
+    ~ factor(
+      .x,
+      levels = c(0, 1),
+      labels = c("No", "Yes")
+    )
+    )
+  ) |>
+  tbl_summary(
+    include = all_of(c(
+      demographic_variables,
+      clinical_variables,
+      sleep_measure_scores,
+      "bss_score"
+    )
+    ),
+    
+    type = bss_score ~ "dichotomous",
+    
+    statistic = list(
+      all_continuous() ~ "{mean} ({sd})",
+      all_categorical() ~ "{n} ({p}%)"
+    ),
+    
+    digits = all_continuous() ~ 2,
+    
+    value = list(
+      all_of(binary_clinical_variables) ~ "Yes",
+      bss_score ~ "High likelihood"
+    ),
+    
+    label = list(
+      age = "Age",
+      gender = "Gender",
+      bmi = "Body Mass Index (BMI)",
+      liver_diagnosis = "Liver diagnosis",
+      recurrence_of_disease = "Recurrence of disease",
+      rejection_graft_dysfunction = "Rejection or graft dysfunction",
+      any_fibrosis = "Any fibrosis (grade A2 and higher)",
+      renal_failure = "Renal failure",
+      depression = "Depression",
+      corticoid = "Corticosteroid use",
+      psqi_score = "Pittsburgh Sleep Quality Index score",
+      ess_score = "Epworth Sleepiness Scale score",
+      ais_score = "Athens Insomnia Scale score",
+      bss_score = "High likelihood of sleep-disordered breathing (Berlin Sleepiness Scale)"
+    ),
+    
+    missing = "no"
+  )
+
+# Create descriptive statistics table for PSQI
+psqi_table <- df_cleaned |>
+  mutate(
+    gender = factor(
+      gender,
+      levels = c(1, 2),
+      labels = c("Male", "Female")
+    ),
+    
+    liver_diagnosis = factor(
+      liver_diagnosis,
+      levels = c(1, 2, 3, 4, 5),
+      labels = c(
+        "Hepatitis C",
+        "Hepatitis B",
+        "PSC/PBC/AIH",
+        "Alcohol-related",
+        "Other"
+      )
+    ),
+    
+    psqi_binary = factor(
+      psqi_binary,
+      levels = c(0, 1),
+      labels = c(
+        "No sleep disturbance",
+        "Yes sleep disturbance"
+      )
+    ),
+  
+    across(all_of(
+      binary_clinical_variables
+    ),
+    ~ factor(
+      .x,
+      levels = c(0, 1),
+      labels = c("No", "Yes")
+      )
+    )
+  ) |>
+  tbl_summary(
+    by = psqi_binary,
+    
+    include = all_of(c(
+      demographic_variables,
+      clinical_variables
+    )
+    ),
+    
+    statistic = list(
+      all_continuous() ~ "{mean} ({sd})",
+      all_categorical() ~ "{n} ({p}%)"
+    ),
+    
+    digits = all_continuous() ~ 2,
+    
+    value = list(
+      all_of(binary_clinical_variables) ~ "Yes"
+    ),
+    
+    label = list(
+      age = "Age",
+      gender = "Gender",
+      bmi = "Body Mass Index (BMI)",
+      liver_diagnosis = "Liver diagnosis",
+      recurrence_of_disease = "Recurrence of disease",
+      rejection_graft_dysfunction = "Rejection or graft dysfunction",
+      any_fibrosis = "Any fibrosis (grade A2 and higher)",
+      renal_failure = "Renal failure",
+      depression = "Depression",
+      corticoid = "Corticosteroid use",
+      psqi_score = "Pittsburgh Sleep Quality Index score"
+    ),
+    
+    missing = "no"
+  )
+
+# Create descriptive statistics table for ESS
+psqi_table <- df_cleaned |>
+  mutate(
+    gender = factor(
+      gender,
+      levels = c(1, 2),
+      labels = c("Male", "Female")
+    ),
+    
+    liver_diagnosis = factor(
+      liver_diagnosis,
+      levels = c(1, 2, 3, 4, 5),
+      labels = c(
+        "Hepatitis C",
+        "Hepatitis B",
+        "PSC/PBC/AIH",
+        "Alcohol-related",
+        "Other"
+      )
+    ),
+    
+    psqi_binary = factor(
+      psqi_binary,
+      levels = c(0, 1),
+      labels = c(
+        "No sleep disturbance",
+        "Yes sleep disturbance"
+      )
+    ),
+    
+    across(all_of(
+      binary_clinical_variables
+    ),
+    ~ factor(
+      .x,
+      levels = c(0, 1),
+      labels = c("No", "Yes")
+    )
+    )
+  ) |>
+  tbl_summary(
+    by = psqi_binary,
+    
+    include = all_of(c(
+      demographic_variables,
+      clinical_variables
+    )
+    ),
+    
+    statistic = list(
+      all_continuous() ~ "{mean} ({sd})",
+      all_categorical() ~ "{n} ({p}%)"
+    ),
+    
+    digits = all_continuous() ~ 2,
+    
+    value = list(
+      all_of(binary_clinical_variables) ~ "Yes"
+    ),
+    
+    label = list(
+      age = "Age",
+      gender = "Gender",
+      bmi = "Body Mass Index (BMI)",
+      liver_diagnosis = "Liver diagnosis",
+      recurrence_of_disease = "Recurrence of disease",
+      rejection_graft_dysfunction = "Rejection or graft dysfunction",
+      any_fibrosis = "Any fibrosis (grade A2 and higher)",
+      renal_failure = "Renal failure",
+      depression = "Depression",
+      corticoid = "Corticosteroid use",
+      psqi_score = "Pittsburgh Sleep Quality Index score"
+    ),
+    
+    missing = "no"
+  )
 
 # RQ1a: Prevalence with proper 95% CIs (Wilson score interval) -----------------
 
@@ -186,10 +442,10 @@ prevalence_ci <- function(x_vec, label) {
 }
 
 prevalence_table <- bind_rows(
-  prevalence_ci(df_updated$ESS_binary, "ESS > 10 (daytime sleepiness)"),
-  prevalence_ci(df_updated$PSQI_binary, "PSQI > 4 (poor sleep quality)"),
-  prevalence_ci(df_updated$AIS_binary, "AIS > 5 (insomnia)"),
-  prevalence_ci(df_updated$Berlin.Sleepiness.Scale, "Berlin (high SDB risk)")
+  prevalence_ci(df_cleaned$ess_binary, "ESS > 10 (daytime sleepiness)"),
+  prevalence_ci(df_cleaned$psqi_binary, "PSQI > 4 (poor sleep quality)"),
+  prevalence_ci(df_cleaned$ais_binary, "AIS > 5 (insomnia)"),
+  prevalence_ci(df_cleaned$bss_score, "Berlin (high SDB risk)")
 )
 print(prevalence_table)
 write.csv(prevalence_table, "prevalence_estimates.csv", row.names = FALSE)
