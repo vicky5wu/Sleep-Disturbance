@@ -62,7 +62,7 @@ df_cleaned <- df_cleaned |>
       liver_diagnosis,
       levels = c(1, 2, 3, 4, 5)
     ),
-
+    
     across(
       c(
         recurrence_of_disease,
@@ -190,7 +190,7 @@ demographic_variables <- c(
 
 # Create descriptive summary table ---------------------------------------------
 
-# Create descriptive statitics table
+# Create descriptive statistics table (overall, ungrouped)
 descriptive_table <- df_cleaned |>
   mutate(
     gender = factor(
@@ -273,7 +273,8 @@ descriptive_table <- df_cleaned |>
     missing = "no"
   )
 
-# Create descriptive statistics table for PSQI
+# Create descriptive statistics table stratified by PSQI status ----------------
+
 psqi_table <- df_cleaned |>
   mutate(
     gender = factor(
@@ -302,7 +303,7 @@ psqi_table <- df_cleaned |>
         "Yes sleep disturbance"
       )
     ),
-  
+    
     across(all_of(
       binary_clinical_variables
     ),
@@ -310,7 +311,7 @@ psqi_table <- df_cleaned |>
       .x,
       levels = c(0, 1),
       labels = c("No", "Yes")
-      )
+    )
     )
   ) |>
   tbl_summary(
@@ -343,15 +344,18 @@ psqi_table <- df_cleaned |>
       any_fibrosis = "Any fibrosis (grade A2 and higher)",
       renal_failure = "Renal failure",
       depression = "Depression",
-      corticoid = "Corticosteroid use",
-      psqi_score = "Pittsburgh Sleep Quality Index score"
+      corticoid = "Corticosteroid use"
     ),
     
     missing = "no"
   )
 
-# Create descriptive statistics table for ESS
-psqi_table <- df_cleaned |>
+# Create descriptive statistics table stratified by ESS status -----------------
+# (NOTE: this used to be a copy-paste of the PSQI table above, stratifying by
+# psqi_binary and overwriting the psqi_table object. Fixed below to actually
+# stratify by ess_binary and save to its own object, ess_table.)
+
+ess_table <- df_cleaned |>
   mutate(
     gender = factor(
       gender,
@@ -371,8 +375,8 @@ psqi_table <- df_cleaned |>
       )
     ),
     
-    psqi_binary = factor(
-      psqi_binary,
+    ess_binary = factor(
+      ess_binary,
       levels = c(0, 1),
       labels = c(
         "No sleep disturbance",
@@ -391,7 +395,7 @@ psqi_table <- df_cleaned |>
     )
   ) |>
   tbl_summary(
-    by = psqi_binary,
+    by = ess_binary,
     
     include = all_of(c(
       demographic_variables,
@@ -420,8 +424,161 @@ psqi_table <- df_cleaned |>
       any_fibrosis = "Any fibrosis (grade A2 and higher)",
       renal_failure = "Renal failure",
       depression = "Depression",
-      corticoid = "Corticosteroid use",
-      psqi_score = "Pittsburgh Sleep Quality Index score"
+      corticoid = "Corticosteroid use"
+    ),
+    
+    missing = "no"
+  )
+
+# Create descriptive statistics table stratified by AIS status -----------------
+
+ais_table <- df_cleaned |>
+  mutate(
+    gender = factor(
+      gender,
+      levels = c(1, 2),
+      labels = c("Male", "Female")
+    ),
+    
+    liver_diagnosis = factor(
+      liver_diagnosis,
+      levels = c(1, 2, 3, 4, 5),
+      labels = c(
+        "Hepatitis C",
+        "Hepatitis B",
+        "PSC/PBC/AIH",
+        "Alcohol-related",
+        "Other"
+      )
+    ),
+    
+    ais_binary = factor(
+      ais_binary,
+      levels = c(0, 1),
+      labels = c(
+        "No sleep disturbance",
+        "Yes sleep disturbance"
+      )
+    ),
+    
+    across(all_of(
+      binary_clinical_variables
+    ),
+    ~ factor(
+      .x,
+      levels = c(0, 1),
+      labels = c("No", "Yes")
+    )
+    )
+  ) |>
+  tbl_summary(
+    by = ais_binary,
+    
+    include = all_of(c(
+      demographic_variables,
+      clinical_variables
+    )
+    ),
+    
+    statistic = list(
+      all_continuous() ~ "{mean} ({sd})",
+      all_categorical() ~ "{n} ({p}%)"
+    ),
+    
+    digits = all_continuous() ~ 2,
+    
+    value = list(
+      all_of(binary_clinical_variables) ~ "Yes"
+    ),
+    
+    label = list(
+      age = "Age",
+      gender = "Gender",
+      bmi = "Body Mass Index (BMI)",
+      liver_diagnosis = "Liver diagnosis",
+      recurrence_of_disease = "Recurrence of disease",
+      rejection_graft_dysfunction = "Rejection or graft dysfunction",
+      any_fibrosis = "Any fibrosis (grade A2 and higher)",
+      renal_failure = "Renal failure",
+      depression = "Depression",
+      corticoid = "Corticosteroid use"
+    ),
+    
+    missing = "no"
+  )
+
+# Create descriptive statistics table stratified by Berlin (BSS) status --------
+
+bss_table <- df_cleaned |>
+  mutate(
+    gender = factor(
+      gender,
+      levels = c(1, 2),
+      labels = c("Male", "Female")
+    ),
+    
+    liver_diagnosis = factor(
+      liver_diagnosis,
+      levels = c(1, 2, 3, 4, 5),
+      labels = c(
+        "Hepatitis C",
+        "Hepatitis B",
+        "PSC/PBC/AIH",
+        "Alcohol-related",
+        "Other"
+      )
+    ),
+    
+    bss_score = factor(
+      bss_score,
+      levels = c(0, 1),
+      labels = c(
+        "Low likelihood",
+        "High likelihood"
+      )
+    ),
+    
+    across(all_of(
+      binary_clinical_variables
+    ),
+    ~ factor(
+      .x,
+      levels = c(0, 1),
+      labels = c("No", "Yes")
+    )
+    )
+  ) |>
+  tbl_summary(
+    by = bss_score,
+    
+    include = all_of(c(
+      demographic_variables,
+      clinical_variables
+    )
+    ),
+    
+    statistic = list(
+      all_continuous() ~ "{mean} ({sd})",
+      all_categorical() ~ "{n} ({p}%)"
+    ),
+    
+    digits = all_continuous() ~ 2,
+    
+    value = list(
+      all_of(binary_clinical_variables) ~ "Yes"
+    ),
+    
+    label = list(
+      age = "Age",
+      gender = "Gender",
+      bmi = "Body Mass Index (BMI)",
+      liver_diagnosis = "Liver diagnosis",
+      recurrence_of_disease = "Recurrence of disease",
+      rejection_graft_dysfunction = "Rejection or graft dysfunction",
+      any_fibrosis = "Any fibrosis (grade A2 and higher)",
+      renal_failure = "Renal failure",
+      depression = "Depression",
+      corticoid = "Corticosteroid use"
     ),
     
     missing = "no"
@@ -475,10 +632,15 @@ write.csv(prevalence_table, "prevalence_estimates.csv", row.names = FALSE)
 #     same relationship once with the continuous score and once with
 #     the binarized version, and compare fit. Example below uses SF36
 #     PCS as the outcome and PSQI as the predictor:
+#
+# NOTE: previously this referenced df_updated (raw, pre-cleaning data
+# frame) and PSQI_binary, which does not exist as a column anywhere.
+# Fixed to use df_cleaned with the correct snake_case column names.
 
-m_cont <- lm(SF36.PCS ~ Pittsburgh.Sleep.Quality.Index.Score, data = df_updated)
-m_bin  <- lm(SF36.PCS ~ PSQI_binary, data = df_updated)
+m_cont <- lm(sf36_pcs ~ psqi_score, data = df_cleaned)
+m_bin  <- lm(sf36_pcs ~ psqi_binary, data = df_cleaned)
 
 summary(m_cont)$r.squared
 summary(m_bin)$r.squared
 AIC(m_cont, m_bin)   # lower AIC = better fit, same data/outcome so comparable
+
