@@ -1,8 +1,13 @@
+# ==============================================================================
+# BTC1859 Group Project - Sleep Disturbance and Quality of Life
+# ==============================================================================
+
 library(dplyr)
 library(tidyr)
 library(janitor)
 library(gtsummary)
 library(binom) # for Wilson 95% CIs
+library(car)
 
 # Load data --------------------------------------------------------------------
 
@@ -584,6 +589,18 @@ bss_table <- df_cleaned |>
     missing = "no"
   )
 
+# Merge stratified descriptive statistics tables -------------------------------
+
+stratified_table <- tbl_merge(
+  tbls = list(psqi_table, ess_table, ais_table, bss_table),
+  tab_spanner = c(
+    "**PSQI**",
+    "**ESS**",
+    "**AIS**",
+    "**BSS**"
+  )
+)
+
 # RQ1a: Prevalence with proper 95% CIs (Wilson score interval) -----------------
 
 prevalence_ci <- function(x_vec, label) {
@@ -643,4 +660,98 @@ m_bin  <- lm(sf36_pcs ~ psqi_binary, data = df_cleaned)
 summary(m_cont)$r.squared
 summary(m_bin)$r.squared
 AIC(m_cont, m_bin)   # lower AIC = better fit, same data/outcome so comparable
+
+# Univariate measure screen ----------------------------------------------------
+
+df_cleaned |>
+  summarise(across(
+    all_of(sleep_measure_binary),
+    ~ sum(is.na(.))
+  ))
+
+df_cleaned |> tbl_summary(
+  include = sleep_measure_scores,
+  statistic = list(all_continuous() ~ "{mean} ({sd})")
+)
+
+# Multivariable logistic regression --------------------------------------------
+
+# Create logistic regression model for PSQI
+psqi_formula <- reformulate(
+  termlabels = c(
+    demographic_variables,
+    clinical_variables
+  ),
+  response = "psqi_binary"
+)
+
+m_log_psqi <- glm(psqi_formula,
+  df_cleaned,
+  family = "binomial"
+)
+
+m_psqi_vif <- vif(m_log_psqi)
+
+res_psqi_p <- residuals(m_log_psqi, type = "pearson")
+plot(fitted(m_log_psqi), res_psqi_p)
+res_psqi_d <- residuals(m_log_psqi, type = "deviance")
+plot(fitted(m_log_psqi), res_psqi_d)
+
+# Create logistic regression model for ESS
+ess_formula <- reformulate(
+  termlabels = c(
+    demographic_variables,
+    clinical_variables
+  ),
+  response = "ess_binary"
+)
+
+m_log_ess <- glm(ess_formula,
+  df_cleaned,
+  family = "binomial"
+)
+
+m_ess_vif <- vif(m_log_ess)
+
+# Create logistic regression model for BSS
+bss_formula <- reformulate(
+  termlabels = c(
+    demographic_variables,
+    clinical_variables
+  ),
+  response = "bss_score"
+)
+
+m_log_bss <- glm(bss_formula,
+  df_cleaned,
+  family = "binomial"
+)
+
+m_bss_vif <- vif(m_log_bss)
+
+# Create logistic regression model for AIS
+ais_formula <- reformulate(
+  termlabels = c(
+    demographic_variables,
+    clinical_variables
+  ),
+  response = "ais_binary"
+)
+
+m_log_ais <- glm(ais_formula,
+  df_cleaned,
+  family = "binomial"
+)
+
+m_ais_vif <- vif(m_log_ais)
+
+# Multivariable linear regression ----------------------------------------------
+
+m_lin_pcs <- lm(sf36_pcs ~ psqi_score + ess_score + bss_score + ais_score,
+  data = df_cleaned
+)
+
+m_lin_mcs <- lm(sf36_mcs ~ psqi_score + ess_score + bss_score + ais_score,
+  data = df_cleaned
+)
 
