@@ -841,17 +841,40 @@ psqi_formula <- reformulate(
 )
 
 m_log_psqi <- glm(psqi_formula,
-  df_cleaned,
-  family = "binomial"
+                  df_cleaned,
+                  family = "binomial"
 )
 
 # Examine VIF for PSQI logistic regression model
 m_psqi_vif <- vif(m_log_psqi)
 
+# Read the raw model results (coefficients on the log-odds scale, p-values)
+summary(m_log_psqi)
+
+# Convert log-odds coefficients into odds ratios + 95% CIs (interpretable scale:
+# "patients with X are __ times more likely to have PSQI-defined sleep disturbance")
+psqi_or <- exp(cbind(OR = coef(m_log_psqi), confint(m_log_psqi)))
+print(psqi_or)
+
+# Check for multicollinearity among predictors (VIF > ~5 is a concern)
+m_psqi_vif <- vif(m_log_psqi)
+print(m_psqi_vif)
+
+# Residual diagnostics: look for systematic patterns (points should scatter
+# randomly around 0, no obvious trend/curve)
 res_psqi_p <- residuals(m_log_psqi, type = "pearson")
-plot(fitted(m_log_psqi), res_psqi_p)
+plot(fitted(m_log_psqi), res_psqi_p,
+     main = "PSQI model: Pearson residuals",
+     xlab = "Fitted values", ylab = "Pearson residuals"
+)
+abline(h = 0, lty = 2)
+
 res_psqi_d <- residuals(m_log_psqi, type = "deviance")
-plot(fitted(m_log_psqi), res_psqi_d)
+plot(fitted(m_log_psqi), res_psqi_d,
+     main = "PSQI model: Deviance residuals",
+     xlab = "Fitted values", ylab = "Deviance residuals"
+)
+abline(h = 0, lty = 2)
 
 # Plot PSQI logistic regression model residuals and leverage
 old_par <- par(mfrow = c(1, 2))
@@ -872,12 +895,32 @@ ess_formula <- reformulate(
 )
 
 m_log_ess <- glm(ess_formula,
-  df_cleaned,
-  family = "binomial"
+                 df_cleaned,
+                 family = "binomial"
 )
+
+summary(m_log_ess)
 
 # Examine VIF for ESS logistic regression model
 m_ess_vif <- vif(m_log_ess)
+print(m_ess_vif)
+
+ess_or <- exp(cbind(OR = coef(m_log_ess), confint(m_log_ess)))
+print(ess_or)
+
+res_ess_p <- residuals(m_log_ess, type = "pearson")
+plot(fitted(m_log_ess), res_ess_p,
+     main = "ESS model: Pearson residuals",
+     xlab = "Fitted values", ylab = "Pearson residuals"
+)
+abline(h = 0, lty = 2)
+
+res_ess_d <- residuals(m_log_ess, type = "deviance")
+plot(fitted(m_log_ess), res_ess_d,
+     main = "ESS model: Deviance residuals",
+     xlab = "Fitted values", ylab = "Deviance residuals"
+)
+abline(h = 0, lty = 2)
 
 # Plot ESS logistic regression model residuals and leverage
 plot(
@@ -896,12 +939,32 @@ bss_formula <- reformulate(
 )
 
 m_log_bss <- glm(bss_formula,
-  df_cleaned,
-  family = "binomial"
+                 df_cleaned,
+                 family = "binomial"
 )
+
+summary(m_log_bss)
 
 # Examine VIF for BSS logistic regression model
 m_bss_vif <- vif(m_log_bss)
+print(m_bss_vif)
+
+bss_or <- exp(cbind(OR = coef(m_log_bss), confint(m_log_bss)))
+print(bss_or)
+
+res_bss_p <- residuals(m_log_bss, type = "pearson")
+plot(fitted(m_log_bss), res_bss_p,
+     main = "BSS model: Pearson residuals",
+     xlab = "Fitted values", ylab = "Pearson residuals"
+)
+abline(h = 0, lty = 2)
+
+res_bss_d <- residuals(m_log_bss, type = "deviance")
+plot(fitted(m_log_bss), res_bss_d,
+     main = "BSS model: Deviance residuals",
+     xlab = "Fitted values", ylab = "Deviance residuals"
+)
+abline(h = 0, lty = 2)
 
 # Plot BSS logistic regression model residuals and leverage
 plot(
@@ -920,12 +983,32 @@ ais_formula <- reformulate(
 )
 
 m_log_ais <- glm(ais_formula,
-  df_cleaned,
-  family = "binomial"
+                 df_cleaned,
+                 family = "binomial"
 )
+
+summary(m_log_ais)
 
 # Examine VIF for AIS logistic regression model
 m_ais_vif <- vif(m_log_ais)
+print(m_ais_vif)
+
+ais_or <- exp(cbind(OR = coef(m_log_ais), confint(m_log_ais)))
+print(ais_or)
+
+res_ais_p <- residuals(m_log_ais, type = "pearson")
+plot(fitted(m_log_ais), res_ais_p,
+     main = "AIS model: Pearson residuals",
+     xlab = "Fitted values", ylab = "Pearson residuals"
+)
+abline(h = 0, lty = 2)
+
+res_ais_d <- residuals(m_log_ais, type = "deviance")
+plot(fitted(m_log_ais), res_ais_d,
+     main = "AIS model: Deviance residuals",
+     xlab = "Fitted values", ylab = "Deviance residuals"
+)
+abline(h = 0, lty = 2)
 
 # Plot AIS logistic regression model residuals and leverage
 plot(
@@ -939,11 +1022,60 @@ par(old_par)
 
 # Multivariable linear regression ----------------------------------------------
 
+# --- Crude models: sleep scores only, no adjustment for other patient traits ---
+# These answer "on their own, do sleep scores line up with QoL scores?" but
+# cannot separate a real sleep effect from confounding (e.g. depression could
+# independently affect both sleep and QoL).
+
 m_lin_pcs <- lm(sf36_pcs ~ psqi_score + ess_score + bss_score + ais_score,
-  data = df_cleaned
+                data = df_cleaned
 )
+summary(m_lin_pcs)
 
 m_lin_mcs <- lm(sf36_mcs ~ psqi_score + ess_score + bss_score + ais_score,
-  data = df_cleaned
+                data = df_cleaned
+)
+summary(m_lin_mcs)
+
+# --- Adjusted models: sleep scores + demographic/clinical covariates ----------
+# These ask "does sleep still matter once we account for age, gender, BMI,
+# depression, etc.?" -- this is the more defensible version for drawing
+# conclusions about sleep's relationship with QoL, since it controls for
+# other patient characteristics that could confound the relationship.
+
+pcs_formula_adj <- reformulate(
+  termlabels = c(
+    "psqi_score", "ess_score", "bss_score", "ais_score",
+    demographic_variables,
+    clinical_variables
+  ),
+  response = "sf36_pcs"
 )
 
+m_lin_pcs_adj <- lm(pcs_formula_adj, data = df_cleaned)
+summary(m_lin_pcs_adj)
+m_pcs_adj_vif <- vif(m_lin_pcs_adj)
+print(m_pcs_adj_vif)
+
+mcs_formula_adj <- reformulate(
+  termlabels = c(
+    "psqi_score", "ess_score", "bss_score", "ais_score",
+    demographic_variables,
+    clinical_variables
+  ),
+  response = "sf36_mcs"
+)
+
+m_lin_mcs_adj <- lm(mcs_formula_adj, data = df_cleaned)
+summary(m_lin_mcs_adj)
+m_mcs_adj_vif <- vif(m_lin_mcs_adj)
+print(m_mcs_adj_vif)
+
+# Compare crude vs. adjusted fit -- if R^2 improves a lot and/or sleep-score
+# coefficients change substantially once covariates are added, that's a sign
+# the crude (sleep-only) models were confounded and the adjusted ones should
+# be the ones you report as primary.
+summary(m_lin_pcs)$r.squared
+summary(m_lin_pcs_adj)$r.squared
+summary(m_lin_mcs)$r.squared
+summary(m_lin_mcs_adj)$r.squared
