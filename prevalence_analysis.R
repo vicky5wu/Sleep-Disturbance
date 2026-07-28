@@ -885,6 +885,15 @@ plot(
   ask = FALSE
 )
 
+# Plot PSQI logistic regression model residuals and leverage
+old_par <- par(mfrow = c(1, 2))
+
+plot(
+  m_log_psqi,
+  which = c(1, 5),
+  ask = FALSE
+)
+
 # Create logistic regression model for ESS
 ess_formula <- reformulate(
   termlabels = c(
@@ -899,8 +908,11 @@ m_log_ess <- glm(ess_formula,
                  family = "binomial"
 )
 
+<<<<<<< Updated upstream
 summary(m_log_ess)
 
+=======
+>>>>>>> Stashed changes
 # Examine VIF for ESS logistic regression model
 m_ess_vif <- vif(m_log_ess)
 print(m_ess_vif)
@@ -929,6 +941,13 @@ plot(
   ask = FALSE
 )
 
+# Plot ESS logistic regression model residuals and leverage
+plot(
+  m_log_ess,
+  which = c(1, 5),
+  ask = FALSE
+)
+
 # Create logistic regression model for BSS
 bss_formula <- reformulate(
   termlabels = c(
@@ -943,8 +962,11 @@ m_log_bss <- glm(bss_formula,
                  family = "binomial"
 )
 
+<<<<<<< Updated upstream
 summary(m_log_bss)
 
+=======
+>>>>>>> Stashed changes
 # Examine VIF for BSS logistic regression model
 m_bss_vif <- vif(m_log_bss)
 print(m_bss_vif)
@@ -973,6 +995,13 @@ plot(
   ask = FALSE
 )
 
+# Plot BSS logistic regression model residuals and leverage
+plot(
+  m_log_bss,
+  which = c(1, 5),
+  ask = FALSE
+)
+
 # Create logistic regression model for AIS
 ais_formula <- reformulate(
   termlabels = c(
@@ -987,8 +1016,11 @@ m_log_ais <- glm(ais_formula,
                  family = "binomial"
 )
 
+<<<<<<< Updated upstream
 summary(m_log_ais)
 
+=======
+>>>>>>> Stashed changes
 # Examine VIF for AIS logistic regression model
 m_ais_vif <- vif(m_log_ais)
 print(m_ais_vif)
@@ -1009,6 +1041,16 @@ plot(fitted(m_log_ais), res_ais_d,
      xlab = "Fitted values", ylab = "Deviance residuals"
 )
 abline(h = 0, lty = 2)
+
+# Plot AIS logistic regression model residuals and leverage
+plot(
+  m_log_ais,
+  which = c(1, 5),
+  ask = FALSE
+)
+
+# Restore global plot settings
+par(old_par)
 
 # Plot AIS logistic regression model residuals and leverage
 plot(
