@@ -1210,10 +1210,5 @@ summary(pooled_mcs)
 #     (MI p=0.056).
 #   - depression: flips the other way, from borderline (CC p=0.063) to
 #     significant (MI p=0.031).
-#   Conclusion: the complete-case predictor findings for PSQI specifically
-#   are sensitive to how missingness is handled and should not be stated
-#   with full confidence from complete-case alone. Report this explicitly
-#   as a limitation in Discussion rather than picking complete-case
-#   silently -- exactly the kind of judgment call the "discuss
-#   alternatives and limitations" part of the rubric is asking for.
+
 
