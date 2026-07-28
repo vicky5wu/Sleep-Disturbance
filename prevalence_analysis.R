@@ -8,6 +8,9 @@ library(janitor)
 library(gtsummary)
 library(binom) # for Wilson 95% CIs
 library(car)
+library(ggpubr)
+library(irr)
+library(ggplot2)
 
 # Load data --------------------------------------------------------------------
 
@@ -663,16 +666,168 @@ AIC(m_cont, m_bin)   # lower AIC = better fit, same data/outcome so comparable
 
 # Univariate measure screen ----------------------------------------------------
 
-df_cleaned |>
-  summarise(across(
-    all_of(sleep_measure_binary),
-    ~ sum(is.na(.))
-  ))
+# Create table to screen sleep measure variables 
+sleep_screening_table <- df_cleaned |>
+  tbl_summary(
+    include = c(
+      all_of(sleep_measure_scores),
+      "bss_score"
+    ),
+    
+    type = list(
+      all_of(sleep_measure_scores) ~ "continuous2",
+      bss_score ~ "dichotomous"
+    ),
+    
+    statistic = list(
+      all_of(sleep_measure_scores) ~ c(
+        "{mean} ({sd})",
+        "{median} ({p25}, {p75})"
+      ),
+      bss_score ~ "{n} / {N} ({p}%)"
+    ),
+    
+    value = list(
+      bss_score ~ 1
+    ),
+    
+    label = list(
+      psqi_score ~ "PSQI score",
+      ess_score ~ "ESS score",
+      ais_score ~ "AIS score",
+      bss_score ~ "BSS score"
+    ),
+    
+    missing_text = "Missing"
+  ) |>
+  
+  modify_italic(
+    columns = label,
+    rows = label == "Missing"
+  ) |>
+  
+  modify_table_styling(
+    columns = label,
+    rows = label == "BSS score",
+    footnote = "Respondents with a high likelihood of sleep disturbance"
+  )
 
-df_cleaned |> tbl_summary(
-  include = sleep_measure_scores,
-  statistic = list(all_continuous() ~ "{mean} ({sd})")
+# Cohen's Kappa Analysis --------------------------------------------
+
+psqi_ess_table <- table(
+  df_cleaned$psqi_binary,
+  df_cleaned$ess_binary
 )
+
+psqi_bss_table <- table(
+  df_cleaned$psqi_binary,
+  df_cleaned$bss_score
+)
+
+psqi_ais_table <- table(
+  df_cleaned$psqi_binary,
+  df_cleaned$ais_binary
+)
+
+ess_bss_table <- table(
+  df_cleaned$ess_binary,
+  df_cleaned$bss_score
+)
+
+ess_ais_table <- table(
+  df_cleaned$ess_binary,
+  df_cleaned$ais_binary
+)
+
+bss_ais_table <- table(
+  df_cleaned$bss_score,
+  df_cleaned$ais_binary
+)
+
+sleep_tables <- list(
+  "PSQI|ESS" = psqi_ess_table,
+  "PSQI|BSS" = psqi_bss_table,
+  "PSQI|AIS" = psqi_ais_table,
+  "ESS|BSS"  = ess_bss_table,
+  "ESS|AIS"  = ess_ais_table,
+  "BSS|AIS"  = bss_ais_table
+)
+
+sleep_measures <- c("PSQI", "ESS", "BSS", "AIS")
+
+kappa_matrix <- matrix(
+  NA_real_,
+  nrow = length(sleep_measures),
+  ncol = length(sleep_measures),
+  dimnames = list(
+    sleep_measures,
+    sleep_measures
+  )
+)
+
+# A measure agrees perfectly with itself
+diag(kappa_matrix) <- 1
+
+for (pair_name in names(sleep_tables)) {
+  
+  pair <- strsplit(pair_name, "\\|")[[1]]
+  
+  kappa_value <- vcd::Kappa(
+    sleep_tables[[pair_name]]
+  )$Unweighted["value"] |>
+    unname()
+  
+  kappa_matrix[pair[1], pair[2]] <- kappa_value
+  kappa_matrix[pair[2], pair[1]] <- kappa_value
+}
+
+round(kappa_matrix, 2)
+
+
+kappa_long <- as.data.frame(
+  as.table(kappa_matrix)
+) |>
+  rename(
+    Measure_1 = Var1,
+    Measure_2 = Var2,
+    Kappa = Freq
+  ) |>
+  mutate(
+    Measure_1 = factor(
+      Measure_1,
+      levels = rev(sleep_measures)
+    ),
+    Measure_2 = factor(
+      Measure_2,
+      levels = sleep_measures
+    )
+  )
+
+ggplot(
+  kappa_long,
+  aes(
+    x = Measure_2,
+    y = Measure_1,
+    fill = Kappa
+  )
+) +
+  geom_tile() +
+  geom_text(
+    aes(label = sprintf("%.2f", Kappa))
+  ) +
+  scale_fill_gradient2(
+    limits = c(-1, 1),
+    midpoint = 0
+  ) +
+  coord_equal() +
+  labs(
+    title = "Agreement Between Sleep Measures",
+    x = NULL,
+    y = NULL,
+    fill = "Cohen's κ"
+  ) +
+  theme_minimal()
+
 
 # Multivariable logistic regression --------------------------------------------
 
@@ -689,6 +844,9 @@ m_log_psqi <- glm(psqi_formula,
                   df_cleaned,
                   family = "binomial"
 )
+
+# Examine VIF for PSQI logistic regression model
+m_psqi_vif <- vif(m_log_psqi)
 
 # Read the raw model results (coefficients on the log-odds scale, p-values)
 summary(m_log_psqi)
@@ -718,6 +876,24 @@ plot(fitted(m_log_psqi), res_psqi_d,
 )
 abline(h = 0, lty = 2)
 
+# Plot PSQI logistic regression model residuals and leverage
+old_par <- par(mfrow = c(1, 2))
+
+plot(
+  m_log_psqi,
+  which = c(1, 5),
+  ask = FALSE
+)
+
+# Plot PSQI logistic regression model residuals and leverage
+old_par <- par(mfrow = c(1, 2))
+
+plot(
+  m_log_psqi,
+  which = c(1, 5),
+  ask = FALSE
+)
+
 # Create logistic regression model for ESS
 ess_formula <- reformulate(
   termlabels = c(
@@ -732,13 +908,17 @@ m_log_ess <- glm(ess_formula,
                  family = "binomial"
 )
 
+<<<<<<< Updated upstream
 summary(m_log_ess)
+
+=======
+>>>>>>> Stashed changes
+# Examine VIF for ESS logistic regression model
+m_ess_vif <- vif(m_log_ess)
+print(m_ess_vif)
 
 ess_or <- exp(cbind(OR = coef(m_log_ess), confint(m_log_ess)))
 print(ess_or)
-
-m_ess_vif <- vif(m_log_ess)
-print(m_ess_vif)
 
 res_ess_p <- residuals(m_log_ess, type = "pearson")
 plot(fitted(m_log_ess), res_ess_p,
@@ -754,6 +934,20 @@ plot(fitted(m_log_ess), res_ess_d,
 )
 abline(h = 0, lty = 2)
 
+# Plot ESS logistic regression model residuals and leverage
+plot(
+  m_log_ess,
+  which = c(1, 5),
+  ask = FALSE
+)
+
+# Plot ESS logistic regression model residuals and leverage
+plot(
+  m_log_ess,
+  which = c(1, 5),
+  ask = FALSE
+)
+
 # Create logistic regression model for BSS
 bss_formula <- reformulate(
   termlabels = c(
@@ -768,13 +962,17 @@ m_log_bss <- glm(bss_formula,
                  family = "binomial"
 )
 
+<<<<<<< Updated upstream
 summary(m_log_bss)
+
+=======
+>>>>>>> Stashed changes
+# Examine VIF for BSS logistic regression model
+m_bss_vif <- vif(m_log_bss)
+print(m_bss_vif)
 
 bss_or <- exp(cbind(OR = coef(m_log_bss), confint(m_log_bss)))
 print(bss_or)
-
-m_bss_vif <- vif(m_log_bss)
-print(m_bss_vif)
 
 res_bss_p <- residuals(m_log_bss, type = "pearson")
 plot(fitted(m_log_bss), res_bss_p,
@@ -790,6 +988,20 @@ plot(fitted(m_log_bss), res_bss_d,
 )
 abline(h = 0, lty = 2)
 
+# Plot BSS logistic regression model residuals and leverage
+plot(
+  m_log_bss,
+  which = c(1, 5),
+  ask = FALSE
+)
+
+# Plot BSS logistic regression model residuals and leverage
+plot(
+  m_log_bss,
+  which = c(1, 5),
+  ask = FALSE
+)
+
 # Create logistic regression model for AIS
 ais_formula <- reformulate(
   termlabels = c(
@@ -804,13 +1016,17 @@ m_log_ais <- glm(ais_formula,
                  family = "binomial"
 )
 
+<<<<<<< Updated upstream
 summary(m_log_ais)
+
+=======
+>>>>>>> Stashed changes
+# Examine VIF for AIS logistic regression model
+m_ais_vif <- vif(m_log_ais)
+print(m_ais_vif)
 
 ais_or <- exp(cbind(OR = coef(m_log_ais), confint(m_log_ais)))
 print(ais_or)
-
-m_ais_vif <- vif(m_log_ais)
-print(m_ais_vif)
 
 res_ais_p <- residuals(m_log_ais, type = "pearson")
 plot(fitted(m_log_ais), res_ais_p,
@@ -825,6 +1041,26 @@ plot(fitted(m_log_ais), res_ais_d,
      xlab = "Fitted values", ylab = "Deviance residuals"
 )
 abline(h = 0, lty = 2)
+
+# Plot AIS logistic regression model residuals and leverage
+plot(
+  m_log_ais,
+  which = c(1, 5),
+  ask = FALSE
+)
+
+# Restore global plot settings
+par(old_par)
+
+# Plot AIS logistic regression model residuals and leverage
+plot(
+  m_log_ais,
+  which = c(1, 5),
+  ask = FALSE
+)
+
+# Restore global plot settings
+par(old_par)
 
 # Multivariable linear regression ----------------------------------------------
 
