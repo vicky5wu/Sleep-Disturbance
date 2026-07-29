@@ -708,17 +708,12 @@ complete_case_data <- function(formula, data) {
 
 # Variable selection using AIC-based stepwise selection (stepAIC)
 # ================================================================
-# Straight from Lecture 10 (Jul 27) / Tutorial 10: the professor's point
-# was that eyeballing p-values in the full "kitchen sink" model isn't a
-# real selection procedure. stepAIC() is the tool taught for this.
-#
-# IMPORTANT CAVEAT, also straight from Lecture 10 (slide 9): stepwise
-# selection is data-driven, and once a model is "chosen" by an automated
+# stepwise selection is data-driven, and once a model is "chosen" by an automated
 # procedure, p-values/CIs from that same model are no longer strictly
 # valid (they're conditional on the selection having happened). The
 # lecture explicitly states that choosing predictors from a-priori
 # domain knowledge is preferred over pure stepwise selection. Our
-# approach: keep BOTH the full domain-knowledge model (already built
+# approach: keep both the full domain-knowledge model (already built
 # above, using every clinically relevant covariate named in the
 # assignment) and the stepAIC-reduced model, and compare/discuss them
 # rather than silently picking one. Where they agree, that's your
