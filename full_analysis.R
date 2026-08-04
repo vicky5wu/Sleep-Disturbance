@@ -896,7 +896,7 @@ abline(h = 0, lty = 2)
 
 # -- AIC-based selection (stepAIC), BSS (no continuous counterpart) --
 m_log_bss_step <- stepAIC(m_log_bss, direction = "backward", trace = FALSE)
-summary(m_log_bss_step)\
+summary(m_log_bss_step)
 # result model: bss_score ~ bmi + recurrence_of_disease + renal_failure
 exp(cbind(OR = coef(m_log_bss_step), confint(m_log_bss_step)))
 
@@ -1376,13 +1376,27 @@ tbl_ais_lin <- merge_pair(
   exponentiate = FALSE
 )
 
-tbl_psqi_log
-tbl_psqi_lin
-tbl_ess_log
-tbl_ess_lin
-tbl_bss_log
-tbl_ais_log
-tbl_ais_lin
+tbl_psqi_log %>%
+  as_gt() %>%
+  gtsave("tbl_psqi_log.png")
+tbl_psqi_lin %>%
+  as_gt() %>%
+  gtsave("tbl_psqi_lin.png")
+tbl_ess_log %>%
+  as_gt() %>%
+  gtsave("tbl_ess_log.png")
+tbl_ess_lin %>%
+  as_gt() %>%
+  gtsave("tbl_ess_lin.png")
+tbl_bss_log %>%
+  as_gt() %>%
+  gtsave("tbl_bss_log.png")
+tbl_ais_log %>%
+  as_gt() %>%
+  gtsave("tbl_ais_log.png")
+tbl_ais_lin %>%
+  as_gt() %>%
+  gtsave("tbl_ais_lin.png")
 
 # ==============================================================================
 # RQ2 tables: sleep disturbance and quality of life
@@ -1424,8 +1438,12 @@ tbl_mcs <- tbl_merge(
 ) |>
   modify_caption("**Table. Sleep disturbance and mental quality of life (SF-36 MCS, β [95% CI])**")
 
-tbl_pcs
-tbl_mcs
+tbl_pcs %>%
+  as_gt() %>%
+  gtsave("tbl_pcs.png")
+tbl_mcs %>%
+  as_gt() %>%
+  gtsave("tbl_mcs.png")
 
 # ==============================================================================
 # Sensitivity tables: complete-case vs. multiple imputation, for PSQI
@@ -1494,6 +1512,9 @@ tbl_sens_mcs <- cc_mi_compare(m_lin_mcs_adj, pooled_mcs) |>
   gt::gt() |>
   gt::tab_header(title = "Sensitivity check: adjusted MCS model, complete-case vs. MI")
 
-tbl_sens_psqi
-tbl_sens_pcs
-tbl_sens_mcs
+tbl_sens_psqi %>%
+  gtsave("tbl_sens_psqi.png")
+tbl_sens_pcs %>%
+  gtsave("tbl_sens_pcs.png")
+tbl_sens_mcs %>%
+  gtsave("tbl_sens_mcs.png")
