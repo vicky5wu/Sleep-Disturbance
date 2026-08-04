@@ -1518,3 +1518,95 @@ tbl_sens_pcs %>%
   gtsave("tbl_sens_pcs.png")
 tbl_sens_mcs %>%
   gtsave("tbl_sens_mcs.png")
+
+# ==============================================================================
+# Figure 2: sleep scores by significant clinical predictors (boxplots)
+# ==============================================================================
+library(ggplot2)
+library(patchwork)
+
+box_theme <- theme_minimal(base_size = 11) +
+  theme(panel.grid.minor = element_blank(), plot.title = element_text(face = "bold", size = 11))
+
+p1 <- ggplot(df_cleaned_lbl, aes(x = factor(bss_score, labels = c("Low risk", "High risk")), y = bmi, fill = bss_score == 1)) +
+  geom_boxplot(show.legend = FALSE) +
+  scale_fill_manual(values = c("FALSE" = "#B0B7BF", "TRUE" = "#2E5A87")) +
+  labs(x = "Berlin Sleepiness Scale (BSS)", y = "BMI (kg/m²)", title = "A. BMI by Berlin sleep apnea risk") +
+  box_theme
+
+p2 <- ggplot(df_cleaned_lbl, aes(x = depression, y = psqi_score, fill = depression)) +
+  geom_boxplot(show.legend = FALSE) +
+  scale_fill_manual(values = c("No" = "#B0B7BF", "Yes" = "#2E5A87")) +
+  labs(x = "Depression", y = "PSQI score", title = "B. PSQI score by depression status") +
+  box_theme
+
+p3 <- ggplot(df_cleaned_lbl, aes(x = corticoid, y = ess_score, fill = corticoid)) +
+  geom_boxplot(show.legend = FALSE) +
+  scale_fill_manual(values = c("No" = "#B0B7BF", "Yes" = "#2E5A87")) +
+  labs(x = "Corticosteroid use", y = "ESS score", title = "C. ESS score by corticosteroid use") +
+  box_theme
+
+p4 <- ggplot(df_cleaned_lbl, aes(x = recurrence_of_disease, y = ais_score, fill = recurrence_of_disease)) +
+  geom_boxplot(show.legend = FALSE) +
+  scale_fill_manual(values = c("No" = "#B0B7BF", "Yes" = "#2E5A87")) +
+  labs(x = "Recurrence of disease", y = "AIS score", title = "D. AIS score by disease recurrence") +
+  box_theme
+
+figure2 <- (p1 | p2) / (p3 | p4) +
+  plot_annotation(title = "Figure 2. Distribution of sleep instrument scores by significant clinical predictors",
+                  theme = theme(plot.title = element_text(face = "bold", size = 13)))
+
+ggsave("figure2_clinical_predictors.png", figure2, width = 10, height = 8, dpi = 300)
+
+
+# ==============================================================================
+# Figure 3: forest plot of odds ratios, full logistic models, all 4 instruments
+# ==============================================================================
+library(broom)
+library(dplyr)
+
+# pull OR + CI from each full model, tag with instrument name, keep only the
+# 6 shared demographic/clinical predictors (renal_failure dropped -- separation)
+keep_terms <- c("age", "gender2", "bmi", "recurrence_of_disease1", "depression1", "corticoid1")
+term_labels <- c(
+  age = "Age", gender2 = "Gender: Female", bmi = "BMI",
+  recurrence_of_disease1 = "Recurrence of disease",
+  depression1 = "Depression", corticoid1 = "Corticosteroid use"
+)
+
+get_or <- function(model, instrument) {
+  tidy(model, exponentiate = TRUE, conf.int = TRUE) |>
+    filter(term %in% keep_terms) |>
+    mutate(instrument = instrument, term = term_labels[term])
+}
+
+forest_data <- bind_rows(
+  get_or(m_log_psqi, "PSQI"),
+  get_or(m_log_ess,  "ESS"),
+  get_or(m_log_ais,  "AIS"),
+  get_or(m_log_bss,  "BSS")
+) |>
+  mutate(
+    term = factor(term, levels = rev(unname(term_labels))),
+    instrument = factor(instrument, levels = c("PSQI", "ESS", "AIS", "BSS")),
+    significant = p.value < 0.05
+  )
+
+figure3 <- ggplot(forest_data, aes(x = estimate, y = instrument, xmin = conf.low, xmax = conf.high, color = instrument)) +
+  geom_vline(xintercept = 1, linetype = "dashed", color = "grey40") +
+  geom_pointrange(aes(size = significant), fatten = 3) +
+  scale_size_manual(values = c("TRUE" = 1.1, "FALSE" = 0.6), guide = "none") +
+  scale_color_manual(values = c(PSQI = "#2E5A87", ESS = "#5B9BD5", AIS = "#8FBFE0", BSS = "#B0B7BF")) +
+  scale_x_log10() +
+  facet_grid(rows = vars(term), scales = "free_y", switch = "y") +
+  labs(x = "Odds ratio (log scale), 95% CI", y = NULL, color = NULL,
+       title = "Figure 3. Odds ratios for key predictors of sleep disturbance across four instruments",
+       subtitle = "Larger points indicate p < 0.05. Renal failure excluded (unstable due to separation).") +
+  theme_minimal(base_size = 11) +
+  theme(strip.text.y.left = element_text(angle = 0, face = "bold"),
+        strip.placement = "outside",
+        plot.title = element_text(face = "bold", size = 12),
+        panel.grid.minor = element_blank())
+
+ggsave("figure3_forest_plot_predictors.png", figure3, width = 8.5, height = 8, dpi = 300)
+
