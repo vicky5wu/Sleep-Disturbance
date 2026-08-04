@@ -1207,3 +1207,293 @@ summary(pooled_mcs)
 #     significant (MI p=0.031).
 
 
+# ==============================================================================
+# Result tables for the regression analyses (RQ1b + RQ2 + sensitivity check)
+# ==============================================================================
+# Append this to the end of full_analysis.R and run it AFTER the rest of that
+# script -- it does not refit any of the original models or change any of
+# their estimates. It only builds publication-style tables from the model
+# objects already created above (m_log_psqi, m_log_psqi_step, m_lin_pcs_adj,
+# pooled_psqi, etc.).
+#
+# One exception: for display purposes only, RQ1b/RQ2 models are refit on a
+# copy of the data with factor levels LABELED (e.g. gender "1"/"2" ->
+# "Male"/"Female", matching the labels already used in the descriptive
+# tables earlier in the script). This changes nothing about the numbers --
+# same rows, same predictors, same coefficients -- it just makes the tables
+# readable instead of showing raw numeric codes.
+#
+# NOTE: this was written and proofread without an R session available to
+# execute it (this sandbox has no R installation and no network access to
+# install one) -- run it in your own R session and flag anything that
+# errors so it can be fixed.
+
+library(dplyr)
+library(gtsummary)
+library(gt)
+library(broom)
+
+# ---- Shared predictor labels, reused across every table --------------------
+
+var_labels <- list(
+  age                          ~ "Age",
+  gender                       ~ "Gender",
+  bmi                          ~ "Body Mass Index (BMI)",
+  liver_diagnosis              ~ "Liver diagnosis",
+  recurrence_of_disease        ~ "Recurrence of disease",
+  rejection_graft_dysfunction  ~ "Rejection or graft dysfunction",
+  any_fibrosis                 ~ "Any fibrosis (grade A2 and higher)",
+  renal_failure                ~ "Renal failure",
+  depression                   ~ "Depression",
+  corticoid                    ~ "Corticosteroid use",
+  time_from_transplant         ~ "Time from transplant",
+  psqi_score                   ~ "PSQI score",
+  ess_score                    ~ "ESS score",
+  bss_score                    ~ "BSS (high SDB risk)",
+  ais_score                    ~ "AIS score"
+)
+
+# tbl_regression()'s `label` argument errors (rather than silently ignoring
+# entries) if it's given a label for a variable that isn't actually a
+# PREDICTOR in the model -- e.g. passing the full var_labels list (which
+# includes psqi_score, ess_score, bss_score, ais_score as predictor labels
+# for the RQ2 models) to a model where one of those is instead the RESPONSE
+# (m_lin_psqi/m_lin_ess/m_lin_ais/m_log_bss all have one of these four score
+# variables as their outcome, not a predictor). Using all.vars(formula(model))
+# alone doesn't catch this, since that includes the response too --
+# delete.response() strips it first, so only genuine predictor names are
+# checked against var_labels.
+labels_for_model <- function(model) {
+  predictor_vars <- all.vars(delete.response(terms(model)))
+  Filter(function(f) all.vars(f)[1] %in% predictor_vars, var_labels)
+}
+
+# Logistic models -> odds ratios; linear models -> beta coefficients
+or_tbl <- function(model) {
+  tbl_regression(model, exponentiate = TRUE, label = labels_for_model(model)) |>
+    bold_p() |>
+    modify_header(label = "**Predictor**")
+}
+
+beta_tbl <- function(model) {
+  tbl_regression(model, label = labels_for_model(model)) |>
+    bold_p() |>
+    modify_header(label = "**Predictor**")
+}
+
+# ---- Labeled copy of the data, for table display only ----------------------
+# Coefficients don't change when a factor's *labels* change (only the
+# reference level would) -- this just makes tables print "Female" /
+# "Hepatitis B" / "Yes" instead of raw codes "2" / "2" / "1".
+
+label_clinical_vars <- function(data) {
+  data |>
+    mutate(
+      gender = factor(gender, levels = c(1, 2), labels = c("Male", "Female")),
+      liver_diagnosis = factor(
+        liver_diagnosis,
+        levels = c(1, 2, 3, 4, 5),
+        labels = c("Hepatitis C", "Hepatitis B", "PSC/PBC/AIH", "Alcohol-related", "Other")
+      ),
+      across(
+        all_of(binary_clinical_variables),
+        ~ factor(.x, levels = c(0, 1), labels = c("No", "Yes"))
+      )
+    )
+}
+
+df_cleaned_lbl <- label_clinical_vars(df_cleaned)
+
+# Refits a formula's full model and its already-derived stepwise model on ONE
+# locked-in complete-case subset of the labeled data -- same logic as
+# complete_case_data() above, so the stepwise refit isn't accidentally fit on
+# a different (larger) row subset than the full model it's being compared to.
+refit_pair_for_table <- function(full_formula, step_model, data = df_cleaned_lbl,
+                                 family = NULL) {
+  cc <- complete_case_data(full_formula, data)
+  fit_one <- function(f) {
+    if (is.null(family)) lm(f, data = cc) else glm(f, data = cc, family = family)
+  }
+  list(full = fit_one(full_formula), step = fit_one(formula(step_model)))
+}
+
+merge_pair <- function(pair, caption, exponentiate) {
+  tbl_fn <- if (exponentiate) or_tbl else beta_tbl
+  tbl_merge(
+    tbls = list(tbl_fn(pair$full), tbl_fn(pair$step)),
+    tab_spanner = c("**Full model**", "**Stepwise-selected model**"),
+    quiet = TRUE
+  ) |>
+    modify_caption(caption)
+}
+
+# ==============================================================================
+# RQ1b tables: predictors of each sleep-disturbance instrument
+# (full domain-knowledge model vs. AIC stepwise-selected model)
+# ==============================================================================
+
+psqi_log <- refit_pair_for_table(psqi_formula, m_log_psqi_step, family = "binomial")
+psqi_lin <- refit_pair_for_table(psqi_formula_cont, m_lin_psqi_step)
+ess_log  <- refit_pair_for_table(ess_formula, m_log_ess_step, family = "binomial")
+ess_lin  <- refit_pair_for_table(ess_formula_cont, m_lin_ess_step)
+bss_log  <- refit_pair_for_table(bss_formula, m_log_bss_step, family = "binomial")
+ais_log  <- refit_pair_for_table(ais_formula, m_log_ais_step, family = "binomial")
+ais_lin  <- refit_pair_for_table(ais_formula_cont, m_lin_ais_step)
+
+tbl_psqi_log <- merge_pair(
+  psqi_log,
+  "**Table. Predictors of PSQI-defined sleep disturbance (logistic regression, OR [95% CI])**",
+  exponentiate = TRUE
+)
+tbl_psqi_lin <- merge_pair(
+  psqi_lin,
+  "**Table. Predictors of PSQI score (linear regression, β [95% CI])**",
+  exponentiate = FALSE
+)
+tbl_ess_log <- merge_pair(
+  ess_log,
+  "**Table. Predictors of ESS-defined excessive daytime sleepiness (logistic regression, OR [95% CI])**",
+  exponentiate = TRUE
+)
+tbl_ess_lin <- merge_pair(
+  ess_lin,
+  "**Table. Predictors of ESS score (linear regression, β [95% CI])**",
+  exponentiate = FALSE
+)
+tbl_bss_log <- merge_pair(
+  bss_log,
+  "**Table. Predictors of high-risk sleep-disordered breathing, Berlin Questionnaire (logistic regression, OR [95% CI])**",
+  exponentiate = TRUE
+)
+tbl_ais_log <- merge_pair(
+  ais_log,
+  "**Table. Predictors of AIS-defined insomnia (logistic regression, OR [95% CI])**",
+  exponentiate = TRUE
+)
+tbl_ais_lin <- merge_pair(
+  ais_lin,
+  "**Table. Predictors of AIS score (linear regression, β [95% CI])**",
+  exponentiate = FALSE
+)
+
+tbl_psqi_log
+tbl_psqi_lin
+tbl_ess_log
+tbl_ess_lin
+tbl_bss_log
+tbl_ais_log
+tbl_ais_lin
+
+# ==============================================================================
+# RQ2 tables: sleep disturbance and quality of life
+# (crude vs. adjusted vs. adjusted+stepwise, for PCS and MCS)
+# ==============================================================================
+
+df_pcs_adj_cc_lbl <- complete_case_data(pcs_formula_adj, df_cleaned_lbl)
+df_mcs_adj_cc_lbl <- complete_case_data(mcs_formula_adj, df_cleaned_lbl)
+
+m_lin_pcs_crude_tbl <- lm(sf36_pcs ~ psqi_score + ess_score + bss_score + ais_score,
+                          data = df_cleaned_lbl)
+m_lin_pcs_adj_tbl   <- lm(pcs_formula_adj, data = df_pcs_adj_cc_lbl)
+m_lin_pcs_step_tbl  <- lm(formula(m_lin_pcs_adj_step), data = df_pcs_adj_cc_lbl)
+
+m_lin_mcs_crude_tbl <- lm(sf36_mcs ~ psqi_score + ess_score + bss_score + ais_score,
+                          data = df_cleaned_lbl)
+m_lin_mcs_adj_tbl   <- lm(mcs_formula_adj, data = df_mcs_adj_cc_lbl)
+m_lin_mcs_step_tbl  <- lm(formula(m_lin_mcs_adj_step), data = df_mcs_adj_cc_lbl)
+
+tbl_pcs <- tbl_merge(
+  tbls = list(
+    beta_tbl(m_lin_pcs_crude_tbl),
+    beta_tbl(m_lin_pcs_adj_tbl),
+    beta_tbl(m_lin_pcs_step_tbl)
+  ),
+  tab_spanner = c("**Crude**", "**Adjusted**", "**Adjusted, stepwise**"),
+  quiet = TRUE
+) |>
+  modify_caption("**Table. Sleep disturbance and physical quality of life (SF-36 PCS, β [95% CI])**")
+
+tbl_mcs <- tbl_merge(
+  tbls = list(
+    beta_tbl(m_lin_mcs_crude_tbl),
+    beta_tbl(m_lin_mcs_adj_tbl),
+    beta_tbl(m_lin_mcs_step_tbl)
+  ),
+  tab_spanner = c("**Crude**", "**Adjusted**", "**Adjusted, stepwise**"),
+  quiet = TRUE
+) |>
+  modify_caption("**Table. Sleep disturbance and mental quality of life (SF-36 MCS, β [95% CI])**")
+
+tbl_pcs
+tbl_mcs
+
+# ==============================================================================
+# Sensitivity tables: complete-case vs. multiple imputation, for PSQI
+# ==============================================================================
+# Pooled mice::mipo objects (pooled_psqi, pooled_pcs, pooled_mcs, built in the
+# MI section above) don't carry the same categorical-variable metadata
+# tbl_regression()/tbl_merge() rely on, so these comparisons are built
+# directly from broom::tidy() (complete-case) and summary(..., conf.int =
+# TRUE) (pooled) instead. term_labels below just prettifies the raw dummy-
+# variable names (e.g. "gender2" -> "Gender: Female") using the same coding
+# scheme as the un-labeled models used in the MI section (df_cleaned, not
+# df_cleaned_lbl -- the imputation was run on the original coding).
+
+term_labels <- c(
+  age = "Age", gender2 = "Gender: Female", bmi = "BMI",
+  liver_diagnosis2 = "Liver diagnosis: Hepatitis B",
+  liver_diagnosis3 = "Liver diagnosis: PSC/PBC/AIH",
+  liver_diagnosis4 = "Liver diagnosis: Alcohol-related",
+  liver_diagnosis5 = "Liver diagnosis: Other",
+  recurrence_of_disease1 = "Recurrence of disease: Yes",
+  rejection_graft_dysfunction1 = "Rejection/graft dysfunction: Yes",
+  any_fibrosis1 = "Any fibrosis: Yes",
+  renal_failure1 = "Renal failure: Yes",
+  depression1 = "Depression: Yes",
+  corticoid1 = "Corticosteroid use: Yes",
+  time_from_transplant = "Time from transplant",
+  psqi_score = "PSQI score", ess_score = "ESS score",
+  bss_score = "BSS (high SDB risk)", ais_score = "AIS score"
+)
+
+pretty_term <- function(term) {
+  dplyr::if_else(term %in% names(term_labels), unname(term_labels[term]), term)
+}
+
+cc_mi_compare <- function(cc_model, pooled_model, digits = 2) {
+  cc <- broom::tidy(cc_model, conf.int = TRUE) |>
+    dplyr::filter(term != "(Intercept)") |>
+    dplyr::transmute(
+      term = pretty_term(term),
+      `CC beta` = round(estimate, digits),
+      `CC 95% CI` = paste0("(", round(conf.low, digits), ", ", round(conf.high, digits), ")"),
+      `CC p` = signif(p.value, 3)
+    )
+  
+  mi <- summary(pooled_model, conf.int = TRUE) |>
+    dplyr::filter(term != "(Intercept)") |>
+    dplyr::transmute(
+      term = pretty_term(term),
+      `MI beta` = round(estimate, digits),
+      `MI 95% CI` = paste0("(", round(`2.5 %`, digits), ", ", round(`97.5 %`, digits), ")"),
+      `MI p` = signif(p.value, 3)
+    )
+  
+  dplyr::full_join(cc, mi, by = "term")
+}
+
+tbl_sens_psqi <- cc_mi_compare(m_lin_psqi, pooled_psqi) |>
+  gt::gt() |>
+  gt::tab_header(title = "Sensitivity check: PSQI score predictors, complete-case vs. MI")
+
+tbl_sens_pcs <- cc_mi_compare(m_lin_pcs_adj, pooled_pcs) |>
+  gt::gt() |>
+  gt::tab_header(title = "Sensitivity check: adjusted PCS model, complete-case vs. MI")
+
+tbl_sens_mcs <- cc_mi_compare(m_lin_mcs_adj, pooled_mcs) |>
+  gt::gt() |>
+  gt::tab_header(title = "Sensitivity check: adjusted MCS model, complete-case vs. MI")
+
+tbl_sens_psqi
+tbl_sens_pcs
+tbl_sens_mcs
