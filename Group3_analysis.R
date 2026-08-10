@@ -1198,7 +1198,7 @@ summary(m_log_ais_step)
 # corticoid
 exp(cbind(OR = coef(m_log_ais_step), confint(m_log_ais_step)))
 
-# ---- BSS: complete linear regression model -----------------------------------
+# ---- AIS: complete linear regression model -----------------------------------
 
 ais_formula_cont <- reformulate(
   termlabels = c(demographic_variables, clinical_variables),
