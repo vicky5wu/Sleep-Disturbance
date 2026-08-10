@@ -2599,3 +2599,334 @@ ggplot(grid_cont, aes(x = instrument, y = fct_rev(predictor), fill = estimate)) 
   theme(panel.grid = element_blank(), axis.text.x = element_text(face = "bold", size = 12))
 
 ggsave("heatmap_continuous_predictors.png", width = 7.5, height = 5.5, dpi = 300)
+
+# ==============================================================================
+# SF-36 PCS and MCS coefficient plots
+# ==============================================================================
+
+# Sleep-measure labels ---------------------------------------------------------
+
+qol_sleep_labels <- c(
+  psqi_score = "PSQI score",
+  ess_score = "ESS score",
+  ais_score = "AIS score",
+  bss_score = "BSS: high vs. low likelihood"
+)
+
+# Extract sleep-measure estimates from a model ---------------------------------
+
+extract_qol_estimates <- function(
+    model,
+    model_name
+) {
+  model |>
+    tidy(
+      conf.int = TRUE
+    ) |>
+    filter(
+      term %in% names(qol_sleep_labels)
+    ) |>
+    transmute(
+      sleep_measure = unname(
+        qol_sleep_labels[term]
+      ),
+      model = model_name,
+      estimate,
+      conf.low,
+      conf.high
+    )
+}
+
+# Prepare PCS results ----------------------------------------------------------
+
+pcs_plot_data <- bind_rows(
+  extract_qol_estimates(
+    model = m_lin_pcs,
+    model_name = "Sleep measures only"
+  ),
+  extract_qol_estimates(
+    model = m_lin_pcs_adj,
+    model_name = "Adjusted"
+  )
+)
+
+# Prepare MCS results ----------------------------------------------------------
+
+mcs_plot_data <- bind_rows(
+  extract_qol_estimates(
+    model = m_lin_mcs,
+    model_name = "Sleep measures only"
+  ),
+  extract_qol_estimates(
+    model = m_lin_mcs_adj,
+    model_name = "Adjusted"
+  )
+)
+
+# Apply consistent factor ordering ---------------------------------------------
+
+pcs_plot_data <- pcs_plot_data |>
+  mutate(
+    sleep_measure = factor(
+      sleep_measure,
+      levels = rev(
+        unname(qol_sleep_labels)
+      )
+    ),
+    model = factor(
+      model,
+      levels = c(
+        "Sleep measures only",
+        "Adjusted"
+      )
+    )
+  )
+
+mcs_plot_data <- mcs_plot_data |>
+  mutate(
+    sleep_measure = factor(
+      sleep_measure,
+      levels = rev(
+        unname(qol_sleep_labels)
+      )
+    ),
+    model = factor(
+      model,
+      levels = c(
+        "Sleep measures only",
+        "Adjusted"
+      )
+    )
+  )
+
+# Use the same horizontal scale on both slides ---------------------------------
+
+qol_limits <- range(
+  c(
+    pcs_plot_data$conf.low,
+    pcs_plot_data$conf.high,
+    mcs_plot_data$conf.low,
+    mcs_plot_data$conf.high
+  ),
+  na.rm = TRUE
+)
+
+qol_padding <- diff(qol_limits) * 0.08
+
+qol_limits <- qol_limits +
+  c(
+    -qol_padding,
+    qol_padding
+  )
+
+# Reusable plotting function ---------------------------------------------------
+
+make_qol_coefficient_plot <- function(
+    plot_data,
+    outcome,
+    title,
+    n_sleep,
+    n_adjusted
+) {
+  dodge_position <- position_dodge(
+    width = 0.5
+  )
+  
+  ggplot(
+    data = plot_data,
+    mapping = aes(
+      x = estimate,
+      y = sleep_measure,
+      colour = model,
+      group = model
+    )
+  ) +
+    
+    # No-association reference line
+    geom_vline(
+      xintercept = 0,
+      linetype = "dashed",
+      colour = "grey35",
+      linewidth = 0.8
+    ) +
+    
+    # Confidence intervals
+    geom_linerange(
+      mapping = aes(
+        xmin = conf.low,
+        xmax = conf.high
+      ),
+      position = dodge_position,
+      orientation = "y",
+      linewidth = 1.1
+    ) +
+    
+    # Coefficient estimates
+    geom_point(
+      position = dodge_position,
+      shape = 16,
+      size = 4
+    ) +
+    
+    # Epinephelus_lanceolatus palette
+    scale_colour_manual(
+      values = c(
+        "Sleep measures only" = unname(
+          as.character(
+            paletteer_d(
+              "fishualize::Epinephelus_lanceolatus"
+            )[[2]]
+          )
+        ),
+        "Adjusted" = unname(
+          as.character(
+            paletteer_d(
+              "fishualize::Epinephelus_lanceolatus"
+            )[[1]]
+          )
+        )
+      ),
+      name = NULL
+    ) +
+    
+    # Add major and minor vertical grid lines
+    scale_x_continuous(
+      breaks = qol_major_breaks,
+      minor_breaks = qol_minor_breaks
+    ) +
+    
+    coord_cartesian(
+      xlim = qol_limits
+    ) +
+    
+    labs(
+      x = paste0(
+        "Change in SF-36 ",
+        outcome,
+        " score, B (95% CI)"
+      ),
+      y = NULL,
+      title = title
+    ) +
+    
+    theme_minimal(
+      base_size = 14
+    ) +
+    
+    theme(
+      panel.grid.major.x = element_line(
+        colour = "grey78",
+        linewidth = 0.5
+      ),
+      panel.grid.minor.x = element_line(
+        colour = "grey88",
+        linewidth = 0.35
+      ),
+      panel.grid.major.y = element_blank(),
+      panel.grid.minor.y = element_blank(),
+      
+      plot.title.position = "plot",
+      plot.caption.position = "plot",
+      
+      plot.title = element_text(
+        face = "bold",
+        hjust = 0.5,
+        size = 18,
+        lineheight = 1.1,
+        margin = margin(
+          b = 8
+        )
+      ),
+      
+      plot.subtitle = element_text(
+        size = 13,
+        lineheight = 1.1,
+        margin = margin(
+          b = 12
+        )
+      ),
+      
+      plot.caption = element_text(
+        size = 10,
+        hjust = 0,
+        lineheight = 1.15,
+        margin = margin(
+          t = 12
+        )
+      ),
+      
+      axis.title.x = element_text(
+        size = 13,
+        margin = margin(
+          t = 8
+        )
+      ),
+      
+      axis.text = element_text(
+        size = 13
+      ),
+      
+      legend.position = "bottom",
+      legend.justification = "left",
+      legend.text = element_text(
+        size = 13
+      ),
+      
+      plot.margin = margin(
+        t = 20,
+        r = 35,
+        b = 20,
+        l = 25
+      )
+    )
+}
+
+# PCS slide --------------------------------------------------------------------
+
+figure_pcs_qol <- make_qol_coefficient_plot(
+  plot_data = pcs_plot_data,
+  outcome = "PCS",
+  title = paste(
+    "Sleep Disturbance and Physical Quality of Life"
+  ),
+  n_sleep = nobs(m_lin_pcs),
+  n_adjusted = nobs(m_lin_pcs_adj)
+)
+
+figure_pcs_qol
+
+# MCS slide --------------------------------------------------------------------
+
+figure_mcs_qol <- make_qol_coefficient_plot(
+  plot_data = mcs_plot_data,
+  outcome = "MCS",
+  title = paste(
+    "Sleep Disturbance and Mental Quality of Life"
+  ),
+  n_sleep = nobs(m_lin_mcs),
+  n_adjusted = nobs(m_lin_mcs_adj)
+)
+
+figure_mcs_qol
+
+# Save plots -------------------------------------------------------------------
+
+ggsave(
+  filename = "figure_pcs_qol_slide.png",
+  plot = figure_pcs_qol,
+  width = 10,
+  height = 5,
+  units = "in",
+  dpi = 300,
+  bg = "white"
+)
+
+ggsave(
+  filename = "figure_mcs_qol_slide.png",
+  plot = figure_mcs_qol,
+  width = 10,
+  height = 5,
+  units = "in",
+  dpi = 300,
+  bg = "white"
+)
