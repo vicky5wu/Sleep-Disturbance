@@ -6,8 +6,14 @@ library(dplyr)
 library(tidyr)
 library(janitor)
 library(gtsummary)
+library(gt)
 library(binom) # for Wilson 95% CIs
 library(car)
+library(ggplot2)
+library(patchwork)
+library(broom)
+library(paletteer)
+library(mice)
 
 # Load data --------------------------------------------------------------------
 
@@ -251,7 +257,10 @@ descriptive_table <- df_cleaned |>
       all_categorical() ~ "{n} ({p}%)"
     ),
     
-    digits = all_continuous() ~ 2,
+    digits = list(
+      all_continuous() ~ 1,
+      all_categorical() ~ c(0, 1)
+    ),
     
     value = list(
       all_of(binary_clinical_variables) ~ "Yes",
@@ -269,6 +278,7 @@ descriptive_table <- df_cleaned |>
       renal_failure = "Renal failure",
       depression = "Depression",
       corticoid = "Corticosteroid use",
+      time_from_transplant = "Time from transplant (years)",
       psqi_score = "Pittsburgh Sleep Quality Index score",
       ess_score = "Epworth Sleepiness Scale score",
       ais_score = "Athens Insomnia Scale score",
@@ -277,6 +287,10 @@ descriptive_table <- df_cleaned |>
     
     missing = "no"
   )
+
+descriptive_table |>
+  as_gt() |>
+  gtsave("tbl_characteristics.png")
 
 # Create descriptive statistics table stratified by PSQI status ----------------
 
@@ -333,7 +347,10 @@ psqi_table <- df_cleaned |>
       all_categorical() ~ "{n} ({p}%)"
     ),
     
-    digits = all_continuous() ~ 2,
+    digits = list(
+      all_continuous() ~ 1,
+      all_categorical() ~ c(0, 1)
+    ),
     
     value = list(
       all_of(binary_clinical_variables) ~ "Yes"
@@ -349,7 +366,8 @@ psqi_table <- df_cleaned |>
       any_fibrosis = "Any fibrosis (grade A2 and higher)",
       renal_failure = "Renal failure",
       depression = "Depression",
-      corticoid = "Corticosteroid use"
+      corticoid = "Corticosteroid use",
+      time_from_transplant = "Time from transplant (years)"
     ),
     
     missing = "no"
@@ -413,7 +431,10 @@ ess_table <- df_cleaned |>
       all_categorical() ~ "{n} ({p}%)"
     ),
     
-    digits = all_continuous() ~ 2,
+    digits = list(
+      all_continuous() ~ 1,
+      all_categorical() ~ c(0, 1)
+    ),
     
     value = list(
       all_of(binary_clinical_variables) ~ "Yes"
@@ -429,7 +450,8 @@ ess_table <- df_cleaned |>
       any_fibrosis = "Any fibrosis (grade A2 and higher)",
       renal_failure = "Renal failure",
       depression = "Depression",
-      corticoid = "Corticosteroid use"
+      corticoid = "Corticosteroid use",
+      time_from_transplant = "Time from transplant (years)"
     ),
     
     missing = "no"
@@ -490,7 +512,10 @@ ais_table <- df_cleaned |>
       all_categorical() ~ "{n} ({p}%)"
     ),
     
-    digits = all_continuous() ~ 2,
+    digits = list(
+      all_continuous() ~ 1,
+      all_categorical() ~ c(0, 1)
+    ),
     
     value = list(
       all_of(binary_clinical_variables) ~ "Yes"
@@ -506,7 +531,8 @@ ais_table <- df_cleaned |>
       any_fibrosis = "Any fibrosis (grade A2 and higher)",
       renal_failure = "Renal failure",
       depression = "Depression",
-      corticoid = "Corticosteroid use"
+      corticoid = "Corticosteroid use",
+      time_from_transplant = "Time from transplant (years)"
     ),
     
     missing = "no"
@@ -567,7 +593,10 @@ bss_table <- df_cleaned |>
       all_categorical() ~ "{n} ({p}%)"
     ),
     
-    digits = all_continuous() ~ 2,
+    digits = list(
+      all_continuous() ~ 1,
+      all_categorical() ~ c(0, 1)
+    ),
     
     value = list(
       all_of(binary_clinical_variables) ~ "Yes"
@@ -583,7 +612,8 @@ bss_table <- df_cleaned |>
       any_fibrosis = "Any fibrosis (grade A2 and higher)",
       renal_failure = "Renal failure",
       depression = "Depression",
-      corticoid = "Corticosteroid use"
+      corticoid = "Corticosteroid use",
+      time_from_transplant = "Time from transplant (years)"
     ),
     
     missing = "no"
@@ -601,7 +631,113 @@ stratified_table <- tbl_merge(
   )
 )
 
-# RQ1a: Prevalence with proper 95% CIs (Wilson score interval) -----------------
+stratified_gt <- stratified_table |>
+  as_gt() |>
+  gt::tab_options(
+    table.layout = "auto",
+    table.font.size = gt::px(12)
+  )
+
+gtsave(
+  stratified_gt,
+  filename = "tbl_characteristics_stratified.png",
+  vwidth = 2400,
+  vheight = 1800,
+  zoom = 1.5,
+  expand = 20
+)
+
+# Create sleep disturbance prevalence statistics tables ------------------------
+
+sleep_disturbance_table <- df_cleaned |>
+  mutate(
+    across(all_of(
+      sleep_measure_binary
+    ),
+    ~ factor(
+      .x,
+      levels = c(0, 1),
+      labels = c("No", "Yes")
+    )
+    )
+  ) |>
+  tbl_summary(
+
+    include = all_of(
+      sleep_measure_binary
+    ),
+    
+    statistic = list(
+      all_continuous() ~ "{mean} ({sd})",
+      all_categorical() ~ "{n} ({p}%)"
+    ),
+    
+    digits = all_continuous() ~ 2,
+    
+    value = list(
+      all_of(sleep_measure_binary) ~ "Yes"
+    ),
+    
+    label = list(
+      psqi_binary = "Pittsburgh Sleep Quality Index",
+      ess_binary = "Epworth Sleepiness Scale",
+      ais_binary = "Athens Insomnia Scale",
+      bss_score = "Berlin Sleepiness Scale"
+    ),
+    
+    missing = "no"
+  ) |>
+  
+  modify_header(
+    stat_0 ~ "**Prevalence**"
+  ) |>
+  
+  add_n() |>
+  
+  add_ci(
+    pattern = NULL,
+    statistic = all_categorical() ~ "[{conf.low}%, {conf.high}%]",
+    style_fun = list(
+      all_categorical() ~ label_style_number(
+        digits = 1,
+        scale = 100
+      )
+    )
+  ) |>
+  
+  modify_footnote_body(
+    columns = "label",
+    rows = label == "Pittsburgh Sleep Quality Index",
+    footnote = "PSQI > 4"
+  ) |>
+  
+  modify_footnote_body(
+    columns = "label",
+    rows = label == "Epworth Sleepiness Scale",
+    footnote = "ESS > 10"
+  ) |>
+  
+  modify_footnote_body(
+    columns = "label",
+    rows = label == "Athens Insomnia Scale",
+    footnote = "AIS > 5"
+  ) |>
+  
+  modify_footnote_body(
+    columns = "label",
+    rows = label == "Berlin Sleepiness Scale",
+    footnote = "BSS: high likelihood of sleep-disordered breathing"
+  )
+  
+sleep_disturbance_table |>
+  as_gt() |>
+  gtsave("tbl_sleep_disturbance.png")
+
+# ==============================================================================
+# RQ1A - Prevalence
+# ==============================================================================
+
+# Prevalence with proper 95% CIs (Wilson score interval) -----------------------
 
 prevalence_ci <- function(x_vec, label) {
   x <- sum(x_vec, na.rm = TRUE)
@@ -624,45 +760,104 @@ prevalence_table <- bind_rows(
 print(prevalence_table)
 write.csv(prevalence_table, "prevalence_estimates.csv", row.names = FALSE)
 
+# Prevalence by sleep instrument plot ------------------------------------------
 
-# ============================================================
-# Binary vs. continuous: which should we use downstream?
-# ============================================================
-# RQ1a itself ("what is the PREVALENCE") requires a binary case
-# definition by construction -- prevalence is a %, so the table above
-# stands regardless. The real choice is for RQ1b (predictors) and RQ2
-# (relationship with QoL), where the outcome could be modeled either
-# way. There's no single hypothesis test that declares one "correct" --
-# it's a modeling decision -- but here's a principled way to handle it:
-#
-# (A) The general statistical argument (goes in your Discussion):
-#     dichotomizing a continuous score at a cutoff throws away
-#     information. Two patients on opposite sides of PSQI = 4 (say 3
-#     vs. 5) get treated as maximally different, while PSQI = 5 and
-#     PSQI = 25 get treated as identical. This is a well-documented way
-#     to lose statistical power and distort effect estimates (see e.g.
-#     Royston, Altman & Sauerbrei, "Dichotomizing continuous predictors
-#     in multiple regression: a bad idea," Statistics in Medicine,
-#     2006 -- confirm this citation yourselves before using it).
-#
-# (B) An empirical check on YOUR data: for a given outcome, fit the
-#     same relationship once with the continuous score and once with
-#     the binarized version, and compare fit. Example below uses SF36
-#     PCS as the outcome and PSQI as the predictor:
-#
-# NOTE: previously this referenced df_updated (raw, pre-cleaning data
-# frame) and PSQI_binary, which does not exist as a column anywhere.
-# Fixed to use df_cleaned with the correct snake_case column names.
+prevalence_table <- prevalence_table |>
+  mutate(
+    instrument = factor(
+      instrument,
+      levels = instrument[order(-prevalence_percentage)]
+    )
+  )
 
-m_cont <- lm(sf36_pcs ~ psqi_score, data = df_cleaned)
-m_bin  <- lm(sf36_pcs ~ psqi_binary, data = df_cleaned)
+fig1_prevalence <- ggplot(
+  prevalence_table,
+  aes(
+    x = instrument,
+    y = prevalence_percentage,
+    fill = instrument
+  )
+) +
+  
+  geom_col(
+    width = 0.6
+  ) +
+  
+  geom_errorbar(
+    aes(
+      ymin = ci_lower,
+      ymax = ci_upper
+    ),
+    width = 0.15,
+    linewidth = 0.3,
+    colour = "grey40"
+  ) +
 
-summary(m_cont)$r.squared
-summary(m_bin)$r.squared
-AIC(m_cont, m_bin)   # lower AIC = better fit, same data/outcome so comparable
+  scale_fill_paletteer_d(
+    "fishualize::Epinephelus_lanceolatus"
+  ) +
+  
+  scale_x_discrete(
+    labels = c(
+      "PSQI > 4 (poor sleep quality)" = "PSQI",
+      "AIS > 5 (insomnia)" = "AIS",
+      "Berlin (high SDB risk)" = "BSS",
+      "ESS > 10 (daytime sleepiness)" = "ESS"
+    )
+  ) +
+  
+  scale_y_continuous(
+    limits = c(0, 100),
+    expand = expansion(mult = c(0, 0.05))
+  ) +
+  
+  labs(
+    x = "Sleep Instrument",
+    y = "Prevalence (%)",
+    caption = paste0(
+      "Cut-offs: PSQI > 4; ESS > 10; AIS > 5.\n",
+      "BSS = high likelihood of sleep-disordered breathing.\n",
+      "Error bars represent 95% Wilson score confidence intervals"
+    )
+  ) +
+  
+  theme_minimal(base_size = 12) +
+  
+  theme(
+    axis.title = element_text(
+      size = 10,
+      colour = "grey20"
+    ),
+    axis.text = element_text(
+      size = 8,
+      colour = "grey30"
+    ),
+    plot.caption = element_text(
+      hjust = 0,
+      size = 7,
+      colour = "grey30",
+      margin = margin (t = 8)
+    ),
+    plot.caption.position = "plot",
+    legend.position = "none"
+  )
 
-# Univariate measure screen ----------------------------------------------------
-# counts missing values per sleep instrument
+print(fig1_prevalence)
+
+ggsave(
+  filename = "fig1_prevalence.png",
+  plot = fig1_prevalence,
+  width = 5.8,
+  height = 3.6,
+  units = "in",
+  dpi = 300
+)
+
+# ==============================================================================
+# Univariate measure screen
+# ==============================================================================
+
+# Count missing values per sleep instrument
 df_cleaned |>
   summarise(across(
     all_of(sleep_measure_binary),
@@ -674,55 +869,54 @@ df_cleaned |> tbl_summary(
   statistic = list(all_continuous() ~ "{mean} ({sd})")
 )
 
-library(MASS)   # for stepAIC() -- loaded here (not at the top), because
-# MASS::select() would otherwise mask the bare select() call used earlier
-# in the data-validation section above
+# ==============================================================================
+# Binary vs. continuous outcomes
+# ==============================================================================
 
-# Helper: build a locked-in complete-case subset before fitting -----------------
-# stepAIC() errors out ("number of rows in use has changed") if dropping a
-# predictor changes which rows have complete data -- which happens here
-# because bmi (23 missing) and age (2 missing) are candidate predictors, and
-# each sleep/QoL outcome has its own missingness on top. glm()/lm() silently
-# drop incomplete rows per-model, so the full model and a stepwise-reduced
-# model can end up fit on different samples, making their AIC incomparable.
-# Fix: build the complete-case data ONCE per model (outcome + predictors in
-# that model's formula only), then fit glm()/lm() directly against that named
-# object -- NOT inside a wrapper function. (Fitting inside a helper function
-# would break stepAIC()/update() afterwards: they re-evaluate the model's
-# stored call in the environment attached to its formula, which is wherever
-# psqi_formula etc. were originally created, i.e. this script's top level --
-# not a function's local environment, which no longer exists once the
-# function has returned. So the complete-case data frame needs to be a
-# regular named object here, not a local variable inside a function.)
+# For RQ1B and RQ2, continuous scores may preserve more information and power
+# Compare continuous vs. binary models empirically using model fit
+
+# Compare PSQI representations -------------------------------------------------
+
+m_cont <- lm(sf36_pcs ~ psqi_score, data = df_cleaned)
+m_bin  <- lm(sf36_pcs ~ psqi_binary, data = df_cleaned)
+
+summary(m_cont)$r.squared
+summary(m_bin)$r.squared
+
+# Lower AIC indicates better fit when models use the same data and outcome
+AIC(m_cont, m_bin)
+
+# Load MASS for stepwise selection. Loaded here to avoid MASS::select() masking
+# earlier dplyr::select() calls
+library(MASS)
+
+# Create complete-case datasets ------------------------------------------------
+
+# StepAIC() requires models being compared to use the same observations. Lock in complete cases for the outcomes and predictors before fitting models.
 
 complete_case_data <- function(formula, data) {
   vars <- all.vars(formula)
-  # dplyr::select() used explicitly here -- library(MASS) is now attached,
-  # and MASS::select() would otherwise mask dplyr's, same issue as above
   data |> dplyr::select(all_of(vars)) |> drop_na()
 }
 
-# RQ1b: selecting predictors for four sleep disturbance instruments
+# ==============================================================================
+# RQ1B: selecting predictors for four sleep disturbance instruments
+# ==============================================================================
 
-# Multivariable logistic regression --------------------------------------------
+# Multivariable regression: logistic and linear models -------------------------
 
-# Variable selection using AIC-based stepwise selection (stepAIC)
-# ================================================================
-# stepwise selection is data-driven, and once a model is "chosen" by an automated
-# procedure, p-values/CIs from that same model are no longer strictly
-# valid (they're conditional on the selection having happened). The
-# lecture explicitly states that choosing predictors from a-priori
-# domain knowledge is preferred over pure stepwise selection. Our
-# approach: keep both the full domain-knowledge model (already built
-# above, using every clinically relevant covariate named in the
-# assignment) and the stepAIC-reduced model, and compare/discuss them
-# rather than silently picking one. Where they agree, that's your
-# strongest evidence; where they disagree, that's worth a sentence in
-# Results and Discussion.
+# Fit multivariable logistic and linear regression models for the four sleep 
+# instruments. Keep the full domain-knowledge model as the primary model. Use
+# stepAIC-reduced models as a comparison rather than the sole analysis. 
+# Agreement between models strengthens evidence; differences should be
+# discussed.
 
+# ------------------------------------------------------------------------------
+# PSQI 
+# ------------------------------------------------------------------------------
 
-
-# ---- PSQI ----------------------------------------------------------------
+# ---- PSQI: complete logistic regression model --------------------------------
 
 # Create logistic regression model for PSQI
 psqi_formula <- reformulate(
@@ -740,7 +934,8 @@ m_log_psqi <- glm(psqi_formula, data = df_psqi_cc, family = "binomial")
 summary(m_log_psqi)
 
 # Convert log-odds coefficients into odds ratios + 95% CIs (interpretable scale:
-# "patients with X are __ times more likely to have PSQI-defined sleep disturbance")
+# "patients with X are __ times more likely to have PSQI-defined sleep
+# disturbance")
 psqi_or <- exp(cbind(OR = coef(m_log_psqi), confint(m_log_psqi)))
 print(psqi_or)
 
@@ -751,52 +946,80 @@ print(m_psqi_vif)
 # Residual diagnostics: look for systematic patterns (points should scatter
 # randomly around 0, no obvious trend/curve)
 res_psqi_p <- residuals(m_log_psqi, type = "pearson")
+
 plot(fitted(m_log_psqi), res_psqi_p,
-     main = "PSQI model: Pearson residuals",
-     xlab = "Fitted values", ylab = "Pearson residuals"
+  main = "PSQI model: Pearson residuals",
+  xlab = "Fitted values",
+  ylab = "Pearson residuals"
 )
+
 abline(h = 0, lty = 2)
 
 res_psqi_d <- residuals(m_log_psqi, type = "deviance")
+
 plot(fitted(m_log_psqi), res_psqi_d,
-     main = "PSQI model: Deviance residuals",
-     xlab = "Fitted values", ylab = "Deviance residuals"
+  main = "PSQI model: Deviance residuals",
+  xlab = "Fitted values",
+  ylab = "Deviance residuals"
 )
+
 abline(h = 0, lty = 2)
 
-# -- AIC-based selection (stepAIC), PSQI --
+# ---- PSQI: stepAIC logistic regression model ---------------------------------
+
 m_log_psqi_step <- stepAIC(m_log_psqi, direction = "backward", trace = FALSE)
 summary(m_log_psqi_step)
-# result model: psqi_binary ~ age + gender + recurrence_of_disease + 
+
+# Resulting model: psqi_binary ~ age + gender + recurrence_of_disease +
 # renal_failure + depression
 exp(cbind(OR = coef(m_log_psqi_step), confint(m_log_psqi_step)))
 
-# -- Continuous version: PSQI score as a continuous outcome, same predictors --
+# ---- PSQI: linear regression model -------------------------------------------
+
 psqi_formula_cont <- reformulate(
   termlabels = c(demographic_variables, clinical_variables),
   response = "psqi_score"
 )
+
 df_psqi_cont_cc <- complete_case_data(psqi_formula_cont, df_cleaned)
+
 m_lin_psqi <- lm(psqi_formula_cont, data = df_psqi_cont_cc)
+
 summary(m_lin_psqi)
+
 vif(m_lin_psqi)
-par(mfrow = c(2, 2)); plot(m_lin_psqi); par(mfrow = c(1, 1))
+
+par(mfrow = c(2, 2))
+plot(m_lin_psqi)
+par(mfrow = c(1, 1))
+
+# ---- PSQI: stepAIC linear regression model -----------------------------------
 
 m_lin_psqi_step <- stepAIC(m_lin_psqi, direction = "backward", trace = FALSE)
+
 summary(m_lin_psqi_step)
-# result model: psqi_score ~ age + gender + bmi + recurrence_of_disease + 
+
+# Resulting model: psqi_score ~ age + gender + bmi + recurrence_of_disease +
 # rejection_graft_dysfunction + any_fibrosis + depression + corticoid
 
-# -- Compare: did the same predictors survive selection on the continuous
-# score vs. the binary threshold for PSQI? --
+# ---- PSQI: model comparison --------------------------------------------------
+
+# Did the same predictors survive selection on the continuous score vs. the 
+# binary threshold for PSQI?
+
 names(coef(m_log_psqi_step))
 names(coef(m_lin_psqi_step))
 
-# the shared predictors are age, gender, recurrence of disease, and depression
+# The shared predictors are age, gender, recurrence of disease, and depression
 
-# ---- ESS -----------------------------------------------------------------
+# ------------------------------------------------------------------------------
+# ESS 
+# ------------------------------------------------------------------------------
+
+# ---- ESS: complete logistic regression model ---------------------------------
 
 # Create logistic regression model for ESS
+
 ess_formula <- reformulate(
   termlabels = c(
     demographic_variables,
@@ -817,48 +1040,77 @@ m_ess_vif <- vif(m_log_ess)
 print(m_ess_vif)
 
 res_ess_p <- residuals(m_log_ess, type = "pearson")
+
 plot(fitted(m_log_ess), res_ess_p,
-     main = "ESS model: Pearson residuals",
-     xlab = "Fitted values", ylab = "Pearson residuals"
+  main = "ESS model: Pearson residuals",
+  xlab = "Fitted values",
+  ylab = "Pearson residuals"
 )
+
 abline(h = 0, lty = 2)
 
 res_ess_d <- residuals(m_log_ess, type = "deviance")
+
 plot(fitted(m_log_ess), res_ess_d,
-     main = "ESS model: Deviance residuals",
-     xlab = "Fitted values", ylab = "Deviance residuals"
+  main = "ESS model: Deviance residuals",
+  xlab = "Fitted values",
+  ylab = "Deviance residuals"
 )
+
 abline(h = 0, lty = 2)
 
-# -- AIC-based selection (stepAIC), ESS --
+# ---- ESS: stepAIC logistic regression model ----------------------------------
+
 m_log_ess_step <- stepAIC(m_log_ess, direction = "backward", trace = FALSE)
+
 summary(m_log_ess_step)
-# result model: ess_binary ~ liver_diagnosis + rejection_graft_dysfunction + 
+
+# Resulting model: ess_binary ~ liver_diagnosis + rejection_graft_dysfunction + 
 # renal_failure + corticoid
+
 exp(cbind(OR = coef(m_log_ess_step), confint(m_log_ess_step)))
 
-# -- Continuous version: ESS score as a continuous outcome, same predictors --
+# ---- ESS: complete linear regression model -----------------------------------
+
 ess_formula_cont <- reformulate(
   termlabels = c(demographic_variables, clinical_variables),
   response = "ess_score"
 )
+
 df_ess_cont_cc <- complete_case_data(ess_formula_cont, df_cleaned)
+
 m_lin_ess <- lm(ess_formula_cont, data = df_ess_cont_cc)
+
 summary(m_lin_ess)
+
 vif(m_lin_ess)
+
 par(mfrow = c(2, 2)); plot(m_lin_ess); par(mfrow = c(1, 1))
 
-m_lin_ess_step <- stepAIC(m_lin_ess, direction = "backward", trace = FALSE)
-summary(m_lin_ess_step)
-# result model: ess_score ~ gender + rejection_graft_dysfunction + depression + corticoid
+# ---- ESS: stepAIC linear regression model ------------------------------------
 
-# -- Compare: continuous vs. binary predictor sets, ESS --
+m_lin_ess_step <- stepAIC(m_lin_ess, direction = "backward", trace = FALSE)
+
+summary(m_lin_ess_step)
+
+# Resulting model: ess_score ~ gender + rejection_graft_dysfunction + depression + corticoid
+
+# ---- ESS: model comparison ---------------------------------------------------
+
 names(coef(m_log_ess_step))
+
 names(coef(m_lin_ess_step))
 
-# the shared predictors are rejection graft dysfunction and corticoid
+# The shared predictors are rejection graft dysfunction and corticoid
 
-# ---- BSS (binary only, no continuous score exists) -----------------------
+# ------------------------------------------------------------------------------
+# BSS 
+# ------------------------------------------------------------------------------
+
+# No continuous scores exist for the BSS so only a logistic regression model
+# will be used
+
+# ---- BSS: complete logistic regression model ---------------------------------
 
 # Create logistic regression model for BSS
 bss_formula <- reformulate(
@@ -881,27 +1133,37 @@ m_bss_vif <- vif(m_log_bss)
 print(m_bss_vif)
 
 res_bss_p <- residuals(m_log_bss, type = "pearson")
+
 plot(fitted(m_log_bss), res_bss_p,
      main = "BSS model: Pearson residuals",
      xlab = "Fitted values", ylab = "Pearson residuals"
 )
+
 abline(h = 0, lty = 2)
 
 res_bss_d <- residuals(m_log_bss, type = "deviance")
+
 plot(fitted(m_log_bss), res_bss_d,
      main = "BSS model: Deviance residuals",
      xlab = "Fitted values", ylab = "Deviance residuals"
 )
+
 abline(h = 0, lty = 2)
 
-# -- AIC-based selection (stepAIC), BSS (no continuous counterpart) --
+# ---- BSS: stepAIC logistic regression model ----------------------------------
+
 m_log_bss_step <- stepAIC(m_log_bss, direction = "backward", trace = FALSE)
+
 summary(m_log_bss_step)
-# result model: bss_score ~ bmi + recurrence_of_disease + renal_failure
+
+# Resulting model: bss_score ~ bmi + recurrence_of_disease + renal_failure
 exp(cbind(OR = coef(m_log_bss_step), confint(m_log_bss_step)))
 
+# ------------------------------------------------------------------------------
+# AIS 
+# ------------------------------------------------------------------------------
 
-# ---- AIS -----------------------------------------------------------------
+# ---- AIS: complete logistic regression model ---------------------------------
 
 # Create logistic regression model for AIS
 ais_formula <- reformulate(
@@ -937,32 +1199,45 @@ plot(fitted(m_log_ais), res_ais_d,
 )
 abline(h = 0, lty = 2)
 
-# -- AIC-based selection (stepAIC), AIS --
+# ---- AIS: stepAIC logistic regression model ----------------------------------
+
 m_log_ais_step <- stepAIC(m_log_ais, direction = "backward", trace = FALSE)
+
 summary(m_log_ais_step)
-# result model: is_binary ~ age + recurrence_of_disease + depression + corticoid
+
+# Resulting model: is_binary ~ age + recurrence_of_disease + depression +
+# corticoid
 exp(cbind(OR = coef(m_log_ais_step), confint(m_log_ais_step)))
 
-# -- Continuous version: AIS score as a continuous outcome, same predictors --
+# ---- BSS: complete linear regression model -----------------------------------
+
 ais_formula_cont <- reformulate(
   termlabels = c(demographic_variables, clinical_variables),
   response = "ais_score"
 )
 df_ais_cont_cc <- complete_case_data(ais_formula_cont, df_cleaned)
+
 m_lin_ais <- lm(ais_formula_cont, data = df_ais_cont_cc)
+
 summary(m_lin_ais)
+
 vif(m_lin_ais)
+
 par(mfrow = c(2, 2)); plot(m_lin_ais); par(mfrow = c(1, 1))
+
+# ---- AIS: stepAIC linear regression model ------------------------------------
 
 m_lin_ais_step <- stepAIC(m_lin_ais, direction = "backward", trace = FALSE)
 summary(m_lin_ais_step)
-# result model: ais_score ~ age + bmi + recurrence_of_disease + corticoid
 
-# -- Compare: continuous vs. binary predictor sets, AIS --
+# Resulting model: ais_score ~ age + bmi + recurrence_of_disease + corticoid
+
+# ---- AIS: model comparison ---------------------------------------------------
+
 names(coef(m_log_ais_step))
 names(coef(m_lin_ais_step))
 
-# the shared predictors are age, reccurence of disease, and corticoid
+# The shared predictors are age, reccurence of disease, and corticoid
 
 # Which predictors survived AIC-based selection vs. the full model, per
 # instrument? Divergence here is exactly what the assignment prompt
@@ -972,63 +1247,26 @@ AIC(m_log_ess,  m_log_ess_step)
 AIC(m_log_bss,  m_log_bss_step)
 AIC(m_log_ais,  m_log_ais_step)
 
-# all the stepwise selected models have less predictors and smaller AIC values
+# All the stepwise selected models have less predictors and smaller AIC values
 
-# RQ2: Relationship of sleep disturbance with quality of life -----------------
+# ==============================================================================
+# RQ2: Relationship between sleep disturbance and quality of life
+# ==============================================================================
 
-# Multivariable linear regression ----------------------------------------------
+# ------------------------------------------------------------------------------
+# SF36-PCS: physical quality of life
+# ------------------------------------------------------------------------------
 
-# --- Crude models: sleep scores only, no adjustment for other patient traits --
-# These answer "on their own, do sleep scores line up with QoL scores?" but
-# cannot separate a real sleep effect from confounding (e.g. depression could
-# independently affect both sleep and QoL).
+# ---- PCS: unadjusted multivariable linear regression models ------------------
 
+# Examine unadjusted associations between sleep scores and SoL. These models do
+# not account for potential confounding patient characteristics
+
+# Create linear regression model for physical quality of life
 m_lin_pcs <- lm(sf36_pcs ~ psqi_score + ess_score + bss_score + ais_score,
                 data = df_cleaned
 )
 summary(m_lin_pcs)
-
-m_lin_mcs <- lm(sf36_mcs ~ psqi_score + ess_score + bss_score + ais_score,
-                data = df_cleaned
-)
-summary(m_lin_mcs)
-
-# --- Adjusted models: sleep scores + demographic/clinical covariates ----------
-# These ask "does sleep still matter once we account for age, gender, BMI,
-# depression, etc.?" -- this is the more defensible version for drawing
-# conclusions about sleep's relationship with QoL, since it controls for
-# other patient characteristics that could confound the relationship.
-#
-# Clinical justification for including each covariate: each one is plausibly a 
-# common cause of both sleep disturbance and poor QoL.
-#   - depression: well-documented to independently worsen both sleep
-#     (a core diagnostic symptom of depression) and QoL (especially
-#     SF36 MCS). Without adjusting for it, some of what looks like a
-#     "sleep effect" on QoL could really be a depression effect acting
-#     on both.
-#   - corticoid (corticosteroid usage): a drug of anti-rejection
-#     regimens in transplant patients, and a well-known pharmacological
-#     cause of insomnia/sleep disruption as a side effect, while also
-#     independently affecting QoL through other side effects (mood
-#     changes, weight gain, edema). A double-acting confounder specific
-#     to this population.
-#   - renal_failure, any_fibrosis, rejection_graft_dysfunction,
-#     recurrence_of_disease: all markers of graft/disease severity.
-#     Sicker patients could have both worse sleep (symptom burden,
-#     more medications, more hospital visits) and worse physical QoL
-#     (SF36 PCS) independent of any true causal sleep-QoL link.
-#   - time_from_transplant: a proxy for recovery trajectory. Patients
-#     early post-transplant may have both disrupted sleep (acute
-#     recovery/hospitalization effects) and lower QoL that naturally
-#     improves with time, so omitting it risks confounding a
-#     cross-sectional sleep-QoL association with a "time since surgery"
-#     effect.
-#   - age, gender, bmi: standard demographic confounders. These act as baseline
-#     QoL norms and sleep patterns both vary by these independent of
-#     any transplant-specific factors.
-#   - liver_diagnosis: underlying disease etiology may correlate with
-#     different comorbidity/symptom profiles that could affect both
-#     sleep and QoL differently.
 
 pcs_formula_adj <- reformulate(
   termlabels = c(
@@ -1040,19 +1278,36 @@ pcs_formula_adj <- reformulate(
 )
 
 df_pcs_adj_cc <- complete_case_data(pcs_formula_adj, df_cleaned)
+
 m_lin_pcs_adj <- lm(pcs_formula_adj, data = df_pcs_adj_cc)
+
 summary(m_lin_pcs_adj)
+
 m_pcs_adj_vif <- vif(m_lin_pcs_adj)
+
 print(m_pcs_adj_vif)
 
+# ---- PCS: stepAIC multivariable linear regression models ---------------------
 
-# -- AIC-based selection (stepAIC), adjusted PCS model --
 m_lin_pcs_adj_step <- stepAIC(m_lin_pcs_adj, direction = "backward", trace = FALSE)
+
 summary(m_lin_pcs_adj_step)
 
-# result model: sf36_pcs ~ ess_score + ais_score + age + bmi + recurrence_of_disease
+# resulting model: sf36_pcs ~ ess_score + ais_score + age + bmi + 
+# recurrence_of_disease
 
-# -- Residual diagnostics, adjusted PCS model --
+# ------------------------------------------------------------------------------
+# SF36-MCS: mental quality of life
+# ------------------------------------------------------------------------------
+
+# ---- MCS: unadjusted multivariable linear regression models ------------------
+
+# Create linear regression model for mental quality of life
+m_lin_mcs <- lm(sf36_mcs ~ psqi_score + ess_score + bss_score + ais_score,
+                data = df_cleaned
+)
+summary(m_lin_mcs)
+
 par(mfrow = c(2, 2)); plot(m_lin_pcs_adj); par(mfrow = c(1, 1))
 
 mcs_formula_adj <- reformulate(
@@ -1065,122 +1320,144 @@ mcs_formula_adj <- reformulate(
 )
 
 df_mcs_adj_cc <- complete_case_data(mcs_formula_adj, df_cleaned)
+
 m_lin_mcs_adj <- lm(mcs_formula_adj, data = df_mcs_adj_cc)
+
 summary(m_lin_mcs_adj)
+
 m_mcs_adj_vif <- vif(m_lin_mcs_adj)
+
 print(m_mcs_adj_vif)
 
+# ---- MCS: stepAIC multivariable linear regression models ---------------------
 
-# -- AIC-based selection (stepAIC), adjusted MCS model --
 m_lin_mcs_adj_step <- stepAIC(m_lin_mcs_adj, direction = "backward", trace = FALSE)
+
 summary(m_lin_mcs_adj_step)
 
-# result model: sf36_mcs ~ psqi_score + ais_score + age + liver_diagnosis + 
+# Resulting model: sf36_mcs ~ psqi_score + ais_score + age + liver_diagnosis + 
 # rejection_graft_dysfunction + any_fibrosis + depression + time_from_transplant
 
-# -- Residual diagnostics, adjusted MCS model --
+# ------------------------------------------------------------------------------
+# SF36-PCS and SF36-MCS: residual diagnostics
+# ------------------------------------------------------------------------------
+
 par(mfrow = c(2, 2)); plot(m_lin_mcs_adj); par(mfrow = c(1, 1))
 
+# Compare full and stepwise models
 AIC(m_lin_pcs_adj, m_lin_pcs_adj_step)
 AIC(m_lin_mcs_adj, m_lin_mcs_adj_step)
 
-# the backward stepwise AIC models are better, only ais_score survive in both models
+# Lower AIC indicates better relative fit. Check which sleep scores remain after
+# stepAIC selection. If only AIS remains, the other sleep measures may add
+# little independent explanatory value once the remaining predictors are
+# included.
 
-# Do the sleep-score terms (psqi_score, ess_score, bss_score, ais_score)
-# survive together in the stepAIC-reduced QoL models? If AIC drops some
-# of them, that itself is informative -- it suggests those instruments
-# don't add explanatory power once the others are accounted for. Worth
-# checking m_pcs_adj_vif / m_mcs_adj_vif (computed above) specifically
-# for the four sleep-score rows -- if any are high, the four instruments
-# may be too collinear with each other to cleanly separate in one joint
-# model, which would be an argument for also running each sleep
-# instrument in its own separate QoL model as a complement to this one.
+# ------------------------------------------------------------------------------
+# SF36-PCS and SF36-MCS: unadjusted vs. adjusted models
+# ------------------------------------------------------------------------------
 
-
-# Compare crude vs. adjusted fit -- if R^2 improves a lot and/or sleep-score
-# coefficients change substantially once covariates are added, that's a sign
-# the crude (sleep-only) models were confounded and the adjusted ones should
-# be the ones you report as primary.
 summary(m_lin_pcs)$r.squared #0.207
 summary(m_lin_pcs_adj)$r.squared #0.292
 summary(m_lin_pcs_adj_step)$r.squared #0.245
+
 summary(m_lin_mcs)$r.squared #0.319
 summary(m_lin_mcs_adj)$r.squared #0.474
 summary(m_lin_mcs_adj_step)$r.squared #0.470
 
 
-# ================================================================
-# Sensitivity analysis: multiple imputation vs. complete-case, for PSQI
-# ================================================================
-# PSQI is missing in 85/268 patients (32%) -- by far the most-missing
-# variable used anywhere in this analysis (compare: age 2 missing, bmi 23
-# missing, ess 17 missing, ais 6 missing). Every PSQI model above
-# (m_log_psqi, m_lin_psqi, and psqi_score's role inside m_lin_pcs_adj /
-# m_lin_mcs_adj) is fit on a complete-case subset that silently drops
-# those 85 patients. This section checks whether that matters: does using
-# multiple imputation instead of complete-case meaningfully change the conclusions
-# involving PSQI?
-#
-# We impute psqi_score together with the other variables it's analyzed
-# alongside (predictors + other sleep scores + QoL outcomes), refit the
-# same formulas already used above on each imputed dataset, and pool the
-# results with Rubin's rules (mice::pool()).
-#
-# NOTE: this covers the continuous-score models only (psqi_score as an
-# outcome, and as a predictor of QoL). Extending this to the binary
-# m_log_psqi model would require re-deriving psqi_binary from each
-# imputed psqi_score (passive imputation) rather than imputing the binary
-# indicator directly, since imputing a threshold variable on its own can
-# produce a value inconsistent with the underlying score. Flagged here as
-# a possible extension rather than built out, to keep this section
-# focused.
+# ==============================================================================
+# Sensitivity analysis: multiple imputation vs. complete-case for PSQI
+# ==============================================================================
 
-library(mice)
+# PSQI has substantial missingness (85/268, 32%). Compare multiple-imputation
+# results with complete-case results to assess whether PSQI missingness
+# meaningfully affects the conclusions.
+
+# This sensitivity analysis uses continuous PSQI scores only. Binary PSQI would
+# require rederiving PSQI_binary after imputation.
+
+# Prepare data for imputation --------------------------------------------------
 
 imp_vars <- c(
-  demographic_variables, clinical_variables,
-  "psqi_score", "ess_score", "ais_score", "bss_score",
-  "sf36_pcs", "sf36_mcs"
+  demographic_variables,
+  clinical_variables,
+  "psqi_score",
+  "ess_score",
+  "ais_score",
+  "bss_score",
+  "sf36_pcs",
+  "sf36_mcs"
 )
 
-df_for_imputation <- df_cleaned |> dplyr::select(all_of(imp_vars))
+df_for_imputation <- df_cleaned |>
+  dplyr::select(
+    all_of(
+      imp_vars
+    )
+  )
 
-# With 32% missingness on psqi_score we're imputing a much larger share
-# of the data than that toy example, so more imputations are warranted
-# for stable pooled estimates. method = "pmm" (predictive mean matching,
-# mice's default for numeric variables) draws imputed values from
-# actually-observed donors, so imputed PSQI scores stay within the valid
-# 0-21 range -- unlike norm.nob/norm.predict (shown in Tutorial 10 on a
-# toy example), which don't respect that boundary.
-imp <- mice(df_for_imputation, m = 20, method = "pmm", seed = 431859, print = FALSE)
+# Perform multiple imputation --------------------------------------------------
 
-## ---- PSQI as outcome (RQ1b, continuous) ----
-fits_psqi_mi <- lapply(seq_len(imp$m), function(i) {
-  lm(psqi_formula_cont, data = complete(imp, i))
-})
+# Use 20 imputations and predictive mean matching (PMM) for numeric variables.
+# PMM uses observed donor values, helping keep scores within plausible ranges.
+
+imp <- mice(
+  df_for_imputation,
+  m = 20,
+  method = "pmm",
+  seed = 431859,
+  print = FALSE
+)
+
+# RQ1B: PSQI as a continuous outcome -------------------------------------------
+
+# Fit the same model in each inputed dataset and pool estimates using Rubin's
+# rules.
+fits_psqi_mi <- lapply(
+  seq_len(imp$m),
+  function(i) {
+    lm(psqi_formula_cont,
+       data = complete(imp, i))
+  }
+)
+
 pooled_psqi <- pool(as.mira(fits_psqi_mi))
+
 summary(pooled_psqi)
 
-# Compare against the complete-case version:
+# Compare PSQI complete-case vs. imputed reults --------------------------------
 summary(m_lin_psqi)$coefficients
 summary(pooled_psqi)
 
-## ---- PSQI as a predictor of QoL (RQ2, adjusted models) ----
+# RQ2: PSQI as a predictor of physical quality of life -------------------------
+
 fits_pcs_mi <- lapply(seq_len(imp$m), function(i) {
   lm(pcs_formula_adj, data = complete(imp, i))
 })
+
 pooled_pcs <- pool(as.mira(fits_pcs_mi))
+
 summary(pooled_pcs)
+
+# RQ2: PSQI as a predictor of mental quality of life ---------------------------
 
 fits_mcs_mi <- lapply(seq_len(imp$m), function(i) {
   lm(mcs_formula_adj, data = complete(imp, i))
 })
+
 pooled_mcs <- pool(as.mira(fits_mcs_mi))
+
 summary(pooled_mcs)
 
-# Compare against the complete-case versions:
+# Compare complete-case vs. imputed results ------------------------------------
+
+# Similar coefficients, CIs and conclusions would support robustness of the 
+# complete-case findings to PSQI missingness
+
 summary(m_lin_pcs_adj)$coefficients
 summary(pooled_pcs)
+
 summary(m_lin_mcs_adj)$coefficients
 summary(pooled_mcs)
 
@@ -1227,11 +1504,6 @@ summary(pooled_mcs)
 # execute it (this sandbox has no R installation and no network access to
 # install one) -- run it in your own R session and flag anything that
 # errors so it can be fixed.
-
-library(dplyr)
-library(gtsummary)
-library(gt)
-library(broom)
 
 # ---- Shared predictor labels, reused across every table --------------------
 
@@ -1522,8 +1794,6 @@ tbl_sens_mcs %>%
 # ==============================================================================
 # Figure 2: sleep scores by significant clinical predictors (boxplots)
 # ==============================================================================
-library(ggplot2)
-library(patchwork)
 
 box_theme <- theme_minimal(base_size = 11) +
   theme(panel.grid.minor = element_blank(), plot.title = element_text(face = "bold", size = 11))
@@ -1562,8 +1832,6 @@ ggsave("figure2_clinical_predictors.png", figure2, width = 10, height = 8, dpi =
 # ==============================================================================
 # Figure 3: forest plot of odds ratios, full logistic models, all 4 instruments
 # ==============================================================================
-library(broom)
-library(dplyr)
 
 # pull OR + CI from each full model, tag with instrument name, keep only the
 # 6 shared demographic/clinical predictors (renal_failure dropped -- separation)
@@ -1582,9 +1850,9 @@ get_or <- function(model, instrument) {
 
 forest_data <- bind_rows(
   get_or(m_log_psqi, "PSQI"),
-  get_or(m_log_ess,  "ESS"),
-  get_or(m_log_ais,  "AIS"),
-  get_or(m_log_bss,  "BSS")
+  get_or(m_log_ess, "ESS"),
+  get_or(m_log_ais, "AIS"),
+  get_or(m_log_bss, "BSS")
 ) |>
   mutate(
     term = factor(term, levels = rev(unname(term_labels))),
@@ -1599,14 +1867,18 @@ figure3 <- ggplot(forest_data, aes(x = estimate, y = instrument, xmin = conf.low
   scale_color_manual(values = c(PSQI = "#2E5A87", ESS = "#5B9BD5", AIS = "#8FBFE0", BSS = "#B0B7BF")) +
   scale_x_log10() +
   facet_grid(rows = vars(term), scales = "free_y", switch = "y") +
-  labs(x = "Odds ratio (log scale), 95% CI", y = NULL, color = NULL,
-       title = "Figure 3. Odds ratios for key predictors of sleep disturbance across four instruments",
-       subtitle = "Larger points indicate p < 0.05. Renal failure excluded (unstable due to separation).") +
+  labs(
+    x = "Odds ratio (log scale), 95% CI", y = NULL, color = NULL,
+    title = "Figure 3. Odds ratios for key predictors of sleep disturbance across four instruments",
+    subtitle = "Larger points indicate p < 0.05. Renal failure excluded (unstable due to separation)."
+  ) +
   theme_minimal(base_size = 11) +
-  theme(strip.text.y.left = element_text(angle = 0, face = "bold"),
-        strip.placement = "outside",
-        plot.title = element_text(face = "bold", size = 12),
-        panel.grid.minor = element_blank())
+  theme(
+    strip.text.y.left = element_text(angle = 0, face = "bold"),
+    strip.placement = "outside",
+    plot.title = element_text(face = "bold", size = 12),
+    panel.grid.minor = element_blank()
+  )
 
 ggsave("figure3_forest_plot_predictors.png", figure3, width = 8.5, height = 8, dpi = 300)
 
